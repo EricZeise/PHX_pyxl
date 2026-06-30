@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phpp-data-tool-pyxl"
+version = "0.1.0"
+description = "Read and write Passive House (PHPP) input data via openpyxl — no Excel required"
+requires-python = ">=3.10"
+dependencies = [
+    "openpyxl>=3.1",
+    "click>=8.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+excel = ["xlwings>=0.31"]
+
+[project.scripts]
+phpp-tool = "phpp_tool.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
