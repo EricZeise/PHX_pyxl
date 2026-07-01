@@ -2,12 +2,14 @@
 """Two-part roundtrip test: read → JSON → write → verify.
 
 Usage:
-    python scripts/roundtrip.py Data/Example.xlsx Data/Empty.xlsx
-    python scripts/roundtrip.py Data/Empty.xlsx Data/Empty.xlsx
+    python scripts/roundtrip.py Data/Example_IP.xlsx Data/Empty_IP.xlsx
+    python scripts/roundtrip.py --phpp-version EN_10_6_SI Data/Example_SI.xlsx Data/Empty_SI.xlsx
 
-First argument is the source workbook to read.
-Second argument is the blank template to write into.
-Results are saved to records/roundtrip_<timestamp>/.
+First argument (after an optional --phpp-version=X) is the source workbook
+to read. Second is the blank template to write into. --phpp-version selects
+phpp-field-mapping/<version>.md (default EN_10_6_IP) -- source and template
+should be the same PHPP version/type. Results are saved to
+records/roundtrip_<timestamp>/.
 
 PART 1 — No Excel required (pure openpyxl):
   Phase 1 (read inputs): openpyxl reads input cells only (skip_formulas=True).
@@ -45,7 +47,19 @@ from phpp_tool.locators import col_to_idx
 from phpp_tool.reader import read_phpp
 from phpp_tool.writer import write_phpp
 
-FIELD_MAP = str(ROOT / "phpp-field-mapping.md")
+DEFAULT_PHPP_VERSION = "EN_10_6_IP"
+
+
+def _field_map_for_version(phpp_version: str) -> str:
+    path = ROOT / "phpp-field-mapping" / f"{phpp_version}.md"
+    if not path.exists():
+        print(f"No field map found for --phpp-version {phpp_version!r} "
+              f"(expected {path})")
+        sys.exit(1)
+    return str(path)
+
+
+FIELD_MAP = _field_map_for_version(DEFAULT_PHPP_VERSION)
 
 
 def _count_values(data: dict, depth: int = 0) -> tuple[int, int]:
@@ -140,7 +154,6 @@ def _xlwings_full_read(path: Path, field_map: str) -> dict[str, Any] | None:
         return None
 
     try:
-        from phpp_tool.locators import prefer_si_sheet
         from phpp_tool.map_parser import parse_field_map
 
         app = xw.App(visible=False, add_book=False)
@@ -155,7 +168,7 @@ def _xlwings_full_read(path: Path, field_map: str) -> dict[str, Any] | None:
         result: dict[str, Any] = {}
 
         for ws_key, ws_spec in fm.items():
-            sheet_name = prefer_si_sheet(ws_spec["sheet_name"], sheet_names)
+            sheet_name = ws_spec["sheet_name"]
             if sheet_name not in sheet_names:
                 continue
             ws = wb.sheets[sheet_name]
@@ -402,14 +415,27 @@ def roundtrip(source: Path, template: Path, out_dir: Path) -> dict:
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
+    global FIELD_MAP
+
+    args = sys.argv[1:]
+    for i, arg in enumerate(args):
+        if arg.startswith("--phpp-version="):
+            FIELD_MAP = _field_map_for_version(arg.split("=", 1)[1])
+            args = args[:i] + args[i + 1:]
+            break
+        if arg == "--phpp-version" and i + 1 < len(args):
+            FIELD_MAP = _field_map_for_version(args[i + 1])
+            args = args[:i] + args[i + 2:]
+            break
+
+    if len(args) < 2:
         print(__doc__)
         sys.exit(1)
 
     pairs = []
-    for i in range(1, len(sys.argv), 2):
-        source = Path(sys.argv[i])
-        template = Path(sys.argv[i + 1]) if i + 1 < len(sys.argv) else None
+    for i in range(0, len(args), 2):
+        source = Path(args[i])
+        template = Path(args[i + 1]) if i + 1 < len(args) else None
         if template is None:
             print(f"Missing template for {source}")
             sys.exit(1)

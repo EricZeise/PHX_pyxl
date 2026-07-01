@@ -27,9 +27,6 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 logger = logging.getLogger(__name__)
 
-_CELL_REF_RE = re.compile(r"^[A-Z]{1,3}\d+$")
-_NAMED_RANGE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*(_[A-Za-z0-9]+)+$")
-
 SPARSE_ROW_BREAK_THRESHOLD = 3
 
 WsPair = tuple[Worksheet, Worksheet]
@@ -48,14 +45,6 @@ def norm(value: Any) -> str:
     s = s.replace("\xa0", " ")
     s = " ".join(s.split())
     return s.strip().casefold()
-
-
-def prefer_si_sheet(sheet_name: str, available: list[str]) -> str:
-    """Return the SI variant of a sheet name if it exists, otherwise the original."""
-    si_name = f"{sheet_name} SI"
-    if si_name in available:
-        return si_name
-    return sheet_name
 
 
 def col_to_idx(col: str) -> int:
@@ -127,14 +116,6 @@ def parse_cell_ref(ref: str) -> tuple[str, int]:
     return m.group(1), int(m.group(2))
 
 
-def _is_cell_ref(s: str) -> bool:
-    return bool(_CELL_REF_RE.match(s))
-
-
-def _is_named_range(s: str) -> bool:
-    return bool(_NAMED_RANGE_RE.match(s))
-
-
 def is_header_row(row_data: dict[str, Any]) -> bool:
     """Return True if a block row looks like a header rather than data."""
     values = [v for k, v in row_data.items() if k != "_row" and v is not None]
@@ -202,7 +183,14 @@ def resolve_block(
     When *skip_formulas* is True, formula cells are returned as None.
     """
     ws_vals, ws_fmls = ws_pair
-    entry_col = entry_locator.get("col", header_locator.get("col", "A"))
+    entry_col = entry_locator.get("col") or header_locator.get("col") or "A"
+    if not re.match(r"^[A-Za-z]{1,3}$", entry_col):
+        # header_locator['col'] can hold a non-column placeholder (e.g. a
+        # search string in the wrong field) when there's no real
+        # entry_locator and the section is anchored purely by
+        # entry_row_start -- fall back to a harmless default rather than
+        # feeding a bogus column letter to col_to_idx().
+        entry_col = "A"
 
     if entry_row_start is not None:
         start_row = entry_row_start
@@ -248,16 +236,23 @@ def resolve_block(
         if end_marker_n and end_marker_n in marker_val:
             break
 
+        # Sparse/header detection always looks at raw (unfiltered) values,
+        # so a row with real data isn't misclassified as blank just because
+        # skip_formulas nulled out its formula-driven fields. row_data (the
+        # returned dict) still applies the skip_formulas filter as before.
         row_data: dict[str, Any] = {"_row": row_num}
+        raw_data: dict[str, Any] = {"_row": row_num}
         all_none = True
         for j, field_name in enumerate(field_names):
             col_idx = field_col_idxs[j]
-            val = ws_vals.cell(row=row_num, column=col_idx).value
+            raw_val = ws_vals.cell(row=row_num, column=col_idx).value
+            raw_data[field_name] = raw_val
+            if raw_val is not None:
+                all_none = False
+            val = raw_val
             if skip_formulas and _is_formula(ws_fmls, col_idx, row_num):
                 val = None
             row_data[field_name] = val
-            if val is not None:
-                all_none = False
 
         if all_none:
             consecutive_sparse += 1
@@ -265,13 +260,13 @@ def resolve_block(
                 break
             continue
 
-        if is_header_row(row_data):
+        if is_header_row(raw_data):
             logger.debug("Skipping header row %d in sheet %r",
                          row_num, ws_vals.title)
             consecutive_sparse = 0
             continue
 
-        non_row = [v for k, v in row_data.items()
+        non_row = [v for k, v in raw_data.items()
                    if k != "_row" and v is not None]
         has_string = any(isinstance(v, str) for v in non_row)
         if not has_string and len(non_row) <= max(n_fields // 3, 1):
@@ -361,17 +356,3 @@ def resolve_fixed(
 ) -> Any:
     """Read a fixed result location (typically formula outputs)."""
     return cell_value(ws_pair, col, row, skip_formulas=skip_formulas)
-
-
-# ---------------------------------------------------------------------------
-# Item classifier
-# ---------------------------------------------------------------------------
-
-def classify_item(key: str, value: Any) -> str:
-    """Classify an item as 'address', 'named_range', or 'config'."""
-    if isinstance(value, str):
-        if _is_cell_ref(value):
-            return "address"
-        if _is_named_range(value):
-            return "named_range"
-    return "config"

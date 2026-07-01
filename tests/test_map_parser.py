@@ -1,4 +1,4 @@
-"""Tests for the field map parser against phpp-field-mapping.md."""
+"""Tests for the field map parser against phpp-field-mapping/EN_10_6_IP.md."""
 
 from pathlib import Path
 
@@ -6,7 +6,8 @@ import pytest
 
 from phpp_tool.map_parser import parse_field_map
 
-FIELD_MAP = Path(__file__).resolve().parent.parent / "phpp-field-mapping.md"
+FIELD_MAP = (Path(__file__).resolve().parent.parent
+             / "phpp-field-mapping" / "EN_10_6_IP.md")
 
 
 @pytest.fixture(scope="module")
@@ -58,20 +59,20 @@ def test_stubs_parse_without_error(field_map):
 class TestLabelAnchored:
     def test_setpoint_winter(self, field_map):
         f = field_map["VERIFICATION"]["fields"]["setpoint_winter"]
-        assert f["locator_string"] == "Interior temperature winter [°C]:"
+        assert f["locator_string"] == "Interior temperature winter [°F]:"
         assert f["locator_col"] == "J"
         assert f["input_col"] == "K"
         assert f["row_offset"] == 0
-        assert f["unit"] == "C"
+        assert f["unit"] == "F"
         assert f["options"] is None
 
     def test_setpoint_summer(self, field_map):
         f = field_map["VERIFICATION"]["fields"]["setpoint_summer"]
-        assert f["locator_string"] == "Interior temp. summer [°C]:"
+        assert f["locator_string"] == "Interior temp. summer [°F]:"
         assert f["locator_col"] == "M"
         assert f["input_col"] == "N"
         assert f["row_offset"] == 0
-        assert f["unit"] == "C"
+        assert f["unit"] == "F"
 
     def test_num_of_units(self, field_map):
         f = field_map["VERIFICATION"]["fields"]["num_of_units"]

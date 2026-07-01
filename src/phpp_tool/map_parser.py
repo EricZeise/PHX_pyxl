@@ -8,9 +8,16 @@ keyed by worksheet_key -> sections -> fields.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+class FieldMapError(Exception):
+    """Raised when the field map markdown is malformed."""
 
 
 def parse_field_map(path: str | Path) -> dict[str, Any]:
@@ -61,7 +68,7 @@ def _parse_worksheet(heading: str, body: str) -> dict[str, Any] | None:
     first_h3 = body.find("\n### ")
     top_content = body[:first_h3] if first_h3 != -1 else body
 
-    config = _extract_config(top_content)
+    config, config_kind = _extract_config(top_content)
     fields = _extract_label_anchored_fields(top_content)
 
     sections: dict[str, Any] = {}
@@ -72,6 +79,7 @@ def _parse_worksheet(heading: str, body: str) -> dict[str, Any] | None:
         "worksheet_key": worksheet_key,
         "sheet_name": heading,
         "config": config,
+        "config_kind": config_kind,
         "fields": fields,
         "sections": sections,
     }
@@ -84,7 +92,7 @@ def _parse_worksheet(heading: str, body: str) -> dict[str, Any] | None:
 def _parse_section(body: str) -> dict[str, Any]:
     """Parse an H3 subsection body into a structured dict."""
     locators = _extract_locators(body)
-    items = _extract_items(body)
+    items, items_kind = _extract_items(body)
     tables = _extract_tables(body)
 
     column_fields: dict[str, Any] = {}
@@ -110,6 +118,7 @@ def _parse_section(body: str) -> dict[str, Any]:
         section.update(locators)
     if items:
         section["items"] = items
+        section["items_kind"] = items_kind
     if column_fields:
         section["column_fields"] = column_fields
     if row_fields:
@@ -400,7 +409,7 @@ def _parse_appliance_table(
 # ---------------------------------------------------------------------------
 
 _BULLET_ITEM = re.compile(
-    r"^-\s+`([^`]+)`\s*:\s*(.+)$", re.MULTILINE
+    r"^-\s+`([^`]+)`\s*(?:\(([a-z_]+)\))?\s*:\s*(.+)$", re.MULTILINE
 )
 
 _LOCATOR_PATTERN = re.compile(
@@ -415,6 +424,10 @@ _COL_ROW_PATTERN = re.compile(
     re.MULTILINE,
 )
 
+_VALID_KINDS = {"literal", "address", "named_range"}
+_CELL_REF_RE = re.compile(r"^[A-Z]{1,3}\d+$")
+_NAMED_RANGE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*(_[A-Za-z0-9]+)+$")
+
 
 def _extract_locators(text: str) -> dict[str, Any]:
     """Extract header_locator and entry_locator from bullet patterns."""
@@ -428,9 +441,21 @@ def _extract_locators(text: str) -> dict[str, Any]:
     return result
 
 
-def _extract_items(text: str) -> dict[str, Any]:
-    """Extract bullet-list key: value items (excluding locator lines)."""
+def _extract_items(text: str) -> tuple[dict[str, Any], dict[str, str]]:
+    """Extract bullet-list key: value items (excluding locator lines).
+
+    Every plain bullet item must declare its kind explicitly --
+    ``literal``, ``address``, or ``named_range`` -- as
+    `` - `key` (kind): `value` ``. Raises FieldMapError if a bullet is
+    missing a valid kind tag, rather than silently guessing from the
+    value's shape.
+
+    Returns (items, kinds): items maps key -> coerced value (unchanged
+    from before), kinds maps key -> its declared kind, for callers that
+    need to resolve addresses/named ranges without re-inferring the type.
+    """
     items: dict[str, Any] = {}
+    kinds: dict[str, str] = {}
 
     for m in _COL_ROW_PATTERN.finditer(text):
         entry: dict[str, Any] = {"col": m.group(2), "row": int(m.group(3))}
@@ -448,12 +473,40 @@ def _extract_items(text: str) -> dict[str, Any]:
         if any(s <= m.start() < e for s, e in skip_spans):
             continue
         key = m.group(1)
-        raw = m.group(2).strip().strip("`").strip('"').strip()
-        items[key] = _coerce(raw)
-    return items
+        tag = m.group(2)
+        raw = m.group(3).strip().strip("`").strip('"').strip()
+        if tag not in _VALID_KINDS:
+            raise FieldMapError(
+                f"Field map entry `{key}` is missing a required type tag "
+                f"-- one of {sorted(_VALID_KINDS)} -- in line: {m.group(0)!r}"
+            )
+        value = _coerce(raw)
+        items[key] = value
+        kinds[key] = tag
+
+        if isinstance(value, str):
+            looks_address = bool(_CELL_REF_RE.match(value))
+            looks_named_range = bool(_NAMED_RANGE_RE.match(value))
+            if tag == "literal" and (looks_address or looks_named_range):
+                logger.warning(
+                    "Field map entry `%s` is tagged (literal) but value "
+                    "%r looks like a %s -- check this wasn't a mistake",
+                    key, value,
+                    "cell address" if looks_address else "named range",
+                )
+            elif tag == "address" and not looks_address:
+                logger.warning(
+                    "Field map entry `%s` is tagged (address) but value "
+                    "%r doesn't look like a cell reference", key, value)
+            elif tag == "named_range" and not looks_named_range:
+                logger.warning(
+                    "Field map entry `%s` is tagged (named_range) but "
+                    "value %r doesn't look like a named range", key, value)
+
+    return items, kinds
 
 
-def _extract_config(text: str) -> dict[str, Any]:
+def _extract_config(text: str) -> tuple[dict[str, Any], dict[str, str]]:
     """Extract configuration items from the top-level worksheet body."""
     return _extract_items(text)
 

@@ -46,7 +46,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from phpp_tool.reader import read_phpp
 
-FIELD_MAP = str(ROOT / "phpp-field-mapping.md")
+FIELD_MAP = str(ROOT / "phpp-field-mapping" / "EN_10_6_IP.md")
 
 
 def _count_values(data: dict, depth: int = 0) -> tuple[int, int]:

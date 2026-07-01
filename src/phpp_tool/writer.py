@@ -21,12 +21,10 @@ from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from phpp_tool.locators import (
-    classify_item,
     field_col,
     find_row_in_col,
     is_entry_row_header,
     parse_cell_ref,
-    prefer_si_sheet,
 )
 from phpp_tool.map_parser import parse_field_map
 from phpp_tool.surgical_writer import apply_surgical_writes
@@ -70,10 +68,10 @@ def write_phpp(
             if ws_spec is None:
                 logger.info("No field map entry for %r, skipping", ws_key)
                 continue
-            sheet_name = prefer_si_sheet(ws_spec["sheet_name"], sheet_names)
+            sheet_name = ws_spec["sheet_name"]
             if sheet_name not in sheet_names:
-                logger.info("Sheet %r not in template, skipping %s",
-                            sheet_name, ws_key)
+                logger.warning("Sheet %r not in template, skipping %s",
+                               sheet_name, ws_key)
                 continue
             ws_labels = wb_labels[sheet_name]
             total_writes += _write_worksheet(
@@ -175,8 +173,9 @@ def _write_section(
     has_fields = "fields" in sec_spec
 
     items = sec_spec.get("items", {})
-    entry_row_start = items.get(
-        "entry_row_start") or items.get("entry_start_row")
+    entry_row_start = (items.get("entry_row_start")
+                       or items.get("entry_start_row")
+                       or items.get("start_row"))
 
     if has_header and has_entry and has_row_fields and not has_col_fields:
         return _write_row_offset(ws_labels, sheet_name, sec_spec, sec_data,
@@ -190,8 +189,12 @@ def _write_section(
     if has_col_fields and not has_header:
         return _write_static_column(sheet_name, sec_spec, sec_data,
                                     entry_row_start, pending)
+    if has_col_fields and entry_row_start is not None:
+        return _write_block(ws_labels, sheet_name, sec_spec, sec_data,
+                            entry_row_start, pending)
     if has_items:
-        return _write_items(ws_labels, sheet_name, wb_labels, items, sec_data,
+        return _write_items(ws_labels, sheet_name, wb_labels, items,
+                            sec_spec.get("items_kind", {}), sec_data,
                             pending)
     if has_fields:
         return _write_label_anchored(ws_labels, sheet_name, sec_spec["fields"],
@@ -357,6 +360,7 @@ def _write_items(
     sheet_name: str,
     wb_labels: Workbook,
     items_spec: dict[str, Any],
+    items_kind: dict[str, str],
     data: dict[str, Any],
     pending: list[tuple[str, str, int, Any]],
 ) -> int:
@@ -373,7 +377,7 @@ def _write_items(
                                spec_value["row"], value, pending):
                     count += 1
             continue
-        kind = classify_item(key, spec_value)
+        kind = items_kind.get(key, "literal")
         if kind == "address":
             col, row = parse_cell_ref(spec_value)
             if _write_cell(sheet_name, col, row, value, pending):

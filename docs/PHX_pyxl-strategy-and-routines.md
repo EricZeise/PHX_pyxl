@@ -47,7 +47,7 @@ This replaced an earlier design that used a second `data_only=False` openpyxl lo
 
 ### The field map
 
-A single markdown file (`phpp-field-mapping.md`) serves as the dictionary of every mapped cell across 31 worksheets. It defines six addressing strategies for locating cells, since PHPP's layout varies from sheet to sheet:
+A markdown file per PHPP workbook type — `phpp-field-mapping/EN_10_6_IP.md` and `EN_10_6_SI.md`, selected via `--phpp-version` — serves as the dictionary of every mapped cell across 31 worksheets. It defines six addressing strategies for locating cells, since PHPP's layout varies from sheet to sheet:
 
 1. **Label-anchored** — find a text label in one column, read/write the value in a paired column at an optional row offset.
 2. **Header + entry block** — find a header row and entry row, then iterate repeating data rows reading each column field.
@@ -80,41 +80,42 @@ source .venv/bin/activate
 ### `phpp-tool read` — extract a filled workbook to JSON
 
 ```bash
-phpp-tool read Data/Example.xlsx -o records/my_building.json
+phpp-tool read Data/Example_IP.xlsx -o records/my_building.json
 ```
 
 - `WORKBOOK` (positional) — path to the filled `.xlsx` to read.
 - `-o, --output` — JSON output path (omit to print to stdout).
-- `--field-map` — override the field map markdown (defaults to `phpp-field-mapping.md`).
+- `--phpp-version` — resolves `phpp-field-mapping/<version>.md` (default `EN_10_6_IP`). Use `EN_10_6_SI` for a genuinely SI-native single-shell workbook.
+- `--field-map` — direct-path override, bypassing `--phpp-version` entirely.
 
-Internally: `read_phpp()` → `BuildingRecord.from_reader_dict()` → `to_json()`. Takes roughly 20 seconds for a full PHPP workbook.
+Internally: `read_phpp()` → `BuildingRecord.from_reader_dict()` → `to_json()`, then stamps the output JSON with `_phpp_version` for the `write` command to cross-check later. Takes roughly 20 seconds for a full PHPP workbook.
 
 ### `phpp-tool write` — inject a JSON record into a blank template
 
 ```bash
-phpp-tool write records/my_building.json Data/Empty.xlsx -o output.xlsx
+phpp-tool write records/my_building.json Data/Empty_IP.xlsx -o output.xlsx
 ```
 
 - `RECORD_FILE` (positional) — the JSON produced by `read`.
 - `TEMPLATE` (positional) — the blank `.xlsx` to write into.
 - `-o, --output` (required) — path for the written workbook.
-- `--field-map` — same override as `read`.
+- `--phpp-version` / `--field-map` — same as `read`. **Must match the version the record was read with** — `write` compares `--phpp-version` against the record's stamped `_phpp_version` and prints a warning (not a hard error) on mismatch.
 
 Internally: `model_validate_json()` → `model_dump(exclude_none=True)` → `write_phpp()`. Takes roughly 30 seconds.
 
 ### `phpp-tool inspect-map` — audit field map coverage
 
 ```bash
-phpp-tool inspect-map
+phpp-tool inspect-map --phpp-version EN_10_6_IP
 ```
 
-Prints every mapped worksheet with its field/section/config counts. No arguments beyond the shared `--field-map` override. Use this after editing `phpp-field-mapping.md` to confirm the parser still finds everything.
+Prints every mapped worksheet with its field/section/config counts. Use this after editing a field map file to confirm the parser still finds everything (and that every config/items entry still has a valid type tag — `inspect-map` will raise `FieldMapError` immediately if one is missing).
 
 ### `scripts/roundtrip.py` — Parts 1 & 2 verification
 
 ```bash
-python scripts/roundtrip.py Data/Example.xlsx Data/Empty.xlsx
-python scripts/roundtrip.py Data/Empty.xlsx Data/Empty.xlsx
+python scripts/roundtrip.py Data/Example_IP.xlsx Data/Empty_IP.xlsx
+python scripts/roundtrip.py Data/Empty_IP.xlsx Data/Empty_IP.xlsx
 ```
 
 Arguments come in `source template` pairs — pass more pairs on the same command line to run several roundtrips in one invocation (results print a combined summary at the end). Output artifacts land in `records/roundtrip_<timestamp>/`.
@@ -129,7 +130,7 @@ What it runs, phase by phase:
 ### `scripts/verify_excel.py` — Stage 3 full-fidelity comparison
 
 ```bash
-python scripts/verify_excel.py Data/Example.xlsx records/roundtrip_<timestamp>/Example_written.xlsx
+python scripts/verify_excel.py Data/Example_IP.xlsx records/roundtrip_<timestamp>/Example_written.xlsx
 ```
 
 Exactly two positional arguments: `source_file written_file`. Both files must already have been opened in Excel and saved manually — this refreshes cached formula values so openpyxl can read correct results without live Excel access. Output lands in `records/verify_excel_<timestamp>/`, including a machine-readable `verify_excel_summary.json`.
@@ -138,12 +139,12 @@ The full three-stage sequence in practice:
 
 ```bash
 # Stages 1 & 2 — no manual step needed
-python scripts/roundtrip.py Data/Example.xlsx Data/Empty.xlsx
+python scripts/roundtrip.py Data/Example_IP.xlsx Data/Empty_IP.xlsx
 
-# Manual step: open both Data/Example.xlsx and the *_written.xlsx output in Excel, save, close
+# Manual step: open both Data/Example_IP.xlsx and the *_written.xlsx output in Excel, save, close
 
 # Stage 3
-python scripts/verify_excel.py Data/Example.xlsx records/roundtrip_<timestamp>/Example_written.xlsx
+python scripts/verify_excel.py Data/Example_IP.xlsx records/roundtrip_<timestamp>/Example_written.xlsx
 ```
 
 ### Running the test suite
@@ -156,10 +157,10 @@ pytest tests/ -v          # 88 tests, ~0.14s, no Excel needed
 
 | Task | Command |
 |------|---------|
-| Read a filled PHPP → JSON | `phpp-tool read Data/Example.xlsx -o records/my_building.json` |
-| Write JSON → blank PHPP | `phpp-tool write records/my_building.json Data/Empty.xlsx -o output.xlsx` |
+| Read a filled PHPP → JSON | `phpp-tool read Data/Example_IP.xlsx -o records/my_building.json` |
+| Write JSON → blank PHPP | `phpp-tool write records/my_building.json Data/Empty_IP.xlsx -o output.xlsx` |
 | Check field map coverage | `phpp-tool inspect-map` |
-| Roundtrip verification (Parts 1–2) | `python scripts/roundtrip.py Data/Example.xlsx Data/Empty.xlsx` |
+| Roundtrip verification (Parts 1–2) | `python scripts/roundtrip.py Data/Example_IP.xlsx Data/Empty_IP.xlsx` |
 | Full-fidelity check (Stage 3, post-Excel-save) | `python scripts/verify_excel.py <source.xlsx> <written.xlsx>` |
 | Unit tests | `pytest tests/ -v` |
 
@@ -428,7 +429,7 @@ The tool serves a single workflow: extract portable data from a filled PHPP work
 #### Reading a filled workbook
 
 ```bash
-phpp-tool read Data/Example.xlsx -o records/my_building.json
+phpp-tool read Data/Example_IP.xlsx -o records/my_building.json
 ```
 
 No Excel installation required. The tool loads the workbook twice with openpyxl (once for cached values, once for formula detection), walks all 31 mapped worksheets, reads every input cell (skipping formulas), validates through Pydantic models, and writes a JSON file. The process takes roughly 20 seconds for a full PHPP workbook.
@@ -438,7 +439,7 @@ The resulting JSON is organized by worksheet key. Each worksheet contains some c
 #### Writing into a blank template
 
 ```bash
-phpp-tool write records/my_building.json Data/Empty.xlsx -o output.xlsx
+phpp-tool write records/my_building.json Data/Empty_IP.xlsx -o output.xlsx
 ```
 
 No Excel installation required. The tool opens the template read-only with `data_only=True` for label resolution, resolves all cell addresses using the same locator strategies as the reader, collects writes, then persists them via `surgical_writer.py`'s ZIP/XML patch rather than an openpyxl save. This takes roughly 12 seconds (down from ~30s under the old openpyxl-save approach, since patching only the `<sheetData>` region of affected sheets is cheaper than re-serializing the whole workbook).
@@ -511,12 +512,12 @@ The verification pipeline has three stages, each building on the last:
 
 ```bash
 # Stages 1 & 2:
-python scripts/roundtrip.py Data/Example.xlsx Data/Empty.xlsx
+python scripts/roundtrip.py Data/Example_IP.xlsx Data/Empty_IP.xlsx
 
 # Manual step: open both files in Excel, save, close.
 
 # Stage 3:
-python scripts/verify_excel.py Data/Example.xlsx records/.../Example_written.xlsx
+python scripts/verify_excel.py Data/Example_IP.xlsx records/.../Example_written.xlsx
 ```
 
 #### The two standard test pairs
@@ -629,7 +630,7 @@ Lessons from building both PHX_pyxl and its sibling PHX_xlwg against the same fi
 
 **Concerns / Limitations**
 
-- **SI/IP unit mismatch** — field map labels assume SI units (`[°C]`), but `Data/Empty.xlsx` uses IP units (`[°F]`), so some label-anchored locators silently fail to match. No fix is implemented; it would require IP-unit label variants or unit-suffix stripping during `norm()` matching.
+- ~~**SI/IP unit mismatch**~~ — **Fixed 2026-07-01.** The field map is now versioned: `phpp-field-mapping/EN_10_6_IP.md` and `EN_10_6_SI.md`, selected via `--phpp-version` (default `EN_10_6_IP`). `prefer_si_sheet()`'s runtime "try `<Name> SI` first" guessing is deleted entirely — each version declares its own correct `sheet_name` and locator strings directly. This turned out to matter more than a label mismatch: in an IP-shell workbook the `<Name> SI` tabs are formula mirrors of the base tab's real inputs (see the new item below), so the old default silently lost data, not just risked a wrong unit label. Verified against genuinely distinct files: `Data/Example_IP.xlsx` (IP-shell, dual-tab) and `Data/Example_SI.xlsx` (SI-native, single-shell, no `SI`-suffixed tabs at all) — full details and evidence in `phpp-concerns-and-examples.md` #1.
 - **Depends on German internal Excel defined names** (e.g. `Werte_Klima_Region`) — fragile if a PHPP version localizes differently or renames internal ranges.
 - **Assumes a stable PHPP layout** — absolute-address and fixed-result strategies hardcode row/column numbers. A PHPP template revision that inserts or removes rows silently breaks these locators with no built-in detection or warning.
 - **Stale relative to test workbooks** — the label `"DHW circulation pipes or, for heat interface units, forward and return flows"` is defined in the map but not found in either test PHPP workbook, suggesting the map has drifted from the PHPP versions actually in use.
@@ -639,20 +640,26 @@ Lessons from building both PHX_pyxl and its sibling PHX_xlwg against the same fi
 
 - **Malformed `phi_certification_class` row** (Verification, field-map line 21) — unescaped `|` characters inside the label and options text make this a non-standard markdown table row. It doesn't currently break anything: `map_parser.py`'s `_parse_label_row()` uses a state machine specifically hardened for this row (see its docstring), and the parsed `locator_string` — `"Class | Primary energy method"` — matches the real label text in `Verification SI!T13`. Still, it's fragile: any future change to the label-row parser that doesn't account for embedded pipes would silently break this field.
 - **`energy_unit: KHW` typo** (SolarDHW config, field-map line 680) — should be `KWH`, as used everywhere else including the structurally identical PV config block two sections later. Confirmed harmless: `energy_unit`/`footprint_unit` are never read by any Python module — they're descriptive metadata only, not consumed by the reader, writer, or models.
-- **Climate `ud_block` header locator is broken** (field-map line 98) — reads `Header locator: col `Name of location`, string `""`` — the column and search-string values are swapped (should be a real column letter paired with the search text `"Name of location"`). Traced end-to-end: with no `entry_locator` present, `_read_section()`'s dispatch logic misroutes this section to `_read_items_section()` instead of a block/column reader. Confirmed by running `read_phpp()` against `Data/Empty.xlsx`: `CLIMATE.ud_block` resolves to `null` — the section is silently non-functional, and PHX_pyxl neither reads nor writes user-defined climate data rows today.
+- ~~**Climate `ud_block` header locator is broken**~~ — **Fixed 2026-07-01, and turned out to be a code bug, not bad data.** `PH-Tools/PHX`'s own shape file has the identical "swapped-looking" `header_locator` shape for this section, which was the tell. The real bugs: `start_row: 67` wasn't recognized as an alias for `entry_row_start`/`entry_start_row`, so it was silently ignored; and `_read_section()`'s dispatch order checked `has_items` before checking for `column_fields` anchored by an explicit start row, misrouting to `_read_items_section()`. Fixed both (alias added, dispatch reordered) in `reader.py`/`writer.py` in both PHX_pyxl and PHX_xlwg. `CLIMATE.ud_block` now resolves real monthly climate data — see `phpp-concerns-and-examples.md` #8.
 - **Duplicate target cells — one confirmed intentional, one still a genuine bug.** `psi_g_left`/`psi_g_right`/`psi_g_bottom`/`psi_g_top` (Windows → frames, lines 290–293) all mapping to column `IR` is **documented as intentional** in `PHX_Dev/CLAUDE.md` — the original prototype's planning doc — since PHPP treats the glazing-edge (spacer) thermal bridge as one uniform value per window, unlike the installation thermal bridge (`psi_i`), which genuinely varies by side. `duct_assign_1`–`8` (Ventilation, lines 477–484) mapping sequentially to columns Q–X, then `duct_assign_9`/`_10` (lines 485–486) both jumping to `Z` (skipping `Y`) has no such documented rationale and remains a genuine copy-paste-style defect — every duct row silently loses whatever distinct value actually lives in column `Y`.
 
 **Structural concerns affecting efficiency/correctness (verified 2026-07-01):**
 
-- **Config value type is inferred from string shape, not declared — and this already misfires.** `classify_item()` decides whether a config value is a cell address, a named range, or a literal config value by pattern-matching the value itself (`_CELL_REF_RE = ^[A-Z]{1,3}\d+$`), with no explicit type tag anywhere in the markdown. `footprint_unit: M2` (SolarDHW and PV config blocks) happens to match that address pattern, so it's silently resolved as cell `M2` on those sheets instead of kept as the literal string `"M2"`. Confirmed via `read_phpp()` against `Data/Empty.xlsx`: both `SOLAR_DHW.footprint_unit` and `SOLAR_PV.footprint_unit` come back `null`. This isn't limited to these two fields — any future config value shaped like `<1-3 letters><digits>` (a unit code, an ID) will silently misresolve the same way. Fixing it structurally (an explicit type marker in the map, rather than shape-based inference) would remove this whole class of risk.
+- ~~**Config value type inferred from string shape, not declared**~~ — **Fixed 2026-07-01.** Every config/items bullet now requires an explicit `(literal)`/`(address)`/`(named_range)` tag; `map_parser.py` raises `FieldMapError` at parse time if one is missing or invalid, rather than falling back to shape-based guessing. `classify_item()`, `_is_cell_ref()`, and `_is_named_range()` are deleted entirely from `locators.py` — the parsed tag is looked up directly at read/write time. A one-time migration script tagged all 170 existing entries from their then-current classification; the 2 known-wrong `footprint_unit` entries were hand-corrected to `(literal)`. `SOLAR_DHW.footprint_unit`/`SOLAR_PV.footprint_unit` now read back as `"M2"` — see `phpp-concerns-and-examples.md` #10.
 - **`UVALUES` and `EASY_PH` are dead worksheet entries.** Their `sheet_name` values (`"U-Values"`, `"easyPH"`) don't match any real sheet in either test workbook — the actual sheets are `"U-values SI"`/`"R-Values"` (different capitalization and naming scheme entirely), and there's no `easyPH` tab at all in PHPP 10.6. Both are silently skipped on every read and write (an INFO-level log line easy to miss in normal output). The commonly quoted "31 mapped worksheets" figure is optimistic — at least 2 of them currently do nothing.
 - **The `options` enum metadata is mostly inert.** Label-anchored fields like `phi_building_category_type` carry detailed value-code documentation (e.g. `10`: 10-Passive house), but the only runtime consumer of the parsed `options` dict is the appliance-rows stub reader, which just echoes it back as metadata. Reader, writer, and `models.py` never validate a read value against its documented options or translate codes↔labels. It's real domain knowledge that costs upkeep but buys no runtime behavior in the vast majority of fields that carry it.
 - **Minor: the field map is re-parsed from scratch on every call.** `parse_field_map()` has no caching, so `read_phpp()`, `write_phpp()`, and `inspect-map` each parse the same ~922-line markdown file independently; `roundtrip.py` triggers three separate parses per single run (Phases 1, 2, and 3). Negligible today against ~20–30s of workbook I/O, but worth caching or sharing a parsed map if the CLI/scripts are ever restructured to chain multiple operations.
 
 **Additional structural concerns (verified 2026-07-01, second pass):**
 
-- **`ADDNL_VENT` is silently dropped in its entirety under the default `skip_formulas=True` mode — the most severe defect found to date.** Traced end-to-end: `resolve_block()`'s sparse-row heuristic (`locators.py`) discards a row if it has no string value and very few non-`None` fields — a check meant to detect genuinely blank template rows. But under `skip_formulas=True`, formula-driven fields like `display_name` and calculated area/flow values get nulled out first, which trips this same heuristic on real, populated room rows. Two levels up, both `_read_worksheet()` and `read_phpp()` use bare `if result:` truthiness checks, so an empty list/dict from the tripped heuristic causes the entire worksheet key to be omitted rather than emitted as `[]`. Confirmed via the actual CLI: `phpp-tool read Data/Example.xlsx` produces JSON with no `ADDNL_VENT` key at all — real project data (room names like `"childrens 1"`, `"elementary 1"`, and every duct/unit assignment, including the already-documented `duct_assign_9`/`_10` duplicate-column fields) never reaches the output under normal use. This is materially worse than data being wrong — it's an entire worksheet's data vanishing with no error or warning.
-- **`entry_row_start`, when present, silently overrides the discovered entry-locator row with no cross-check.** The `tanks` section (SolarDHW/DHW+Distribution) specifies both an `Entry locator: col J, string "Storage type 1"` *and* an explicit `entry_row_start: 191`. Confirmed the label actually sits at row 189 — two rows off from the hardcoded number — and `locators.py`'s `resolve_block()` (`if entry_row_start is not None: start_row = entry_row_start`) always takes the hardcoded value unconditionally, never validating it against where the label was actually found. If the label ever shifts in a future template revision, this silently reads the wrong rows with zero indication of failure.
+- ~~**`ADDNL_VENT` is silently dropped in its entirety under the default `skip_formulas=True` mode**~~ — **Fixed 2026-07-01. Was the most severe defect found in the first verification pass.** `resolve_block()`'s sparse-row heuristic discarded a row if it had no string value and very few non-`None` fields — meant to detect genuinely blank template rows. Under `skip_formulas=True`, formula-driven fields like `display_name` got nulled out *before* this check ran, tripping the same heuristic on real, populated room rows; two levels up, bare `if result:` truthiness checks then dropped the whole worksheet key silently. **The fix:** sparseness is now decided against raw, unfiltered values first, with `skip_formulas` applied only to what's actually returned; also added a diagnostic warning when a mapped worksheet resolves to no data at all. `read_phpp('Data/Example_IP.xlsx', ...)['ADDNL_VENT']['rooms']` now returns real populated rows — see `phpp-concerns-and-examples.md` #14.
+- **`entry_row_start`, when present, silently overrides the discovered entry-locator row with no cross-check — still true, not fixed.** The `tanks` section (SolarDHW/DHW+Distribution) specifies both an `Entry locator: col J, string "Storage type 1"` *and* an explicit `entry_row_start: 191`. Confirmed the label actually sits at row 189 — two rows off from the hardcoded number — and `locators.py`'s `resolve_block()` (`if entry_row_start is not None: start_row = entry_row_start`) always takes the hardcoded value unconditionally, never validating it against where the label was actually found. Note: this session also discovered a *third* row-anchor key, `start_row` (used by `Climate.ud_block`), which wasn't recognized at all until 2026-07-01 (see the `ud_block` fix above) — the map now has three synonymous keys (`entry_row_start`, `entry_start_row`, `start_row`) for the same concept, all still unvalidated against the discovered label position. If the label ever shifts in a future template revision, this silently reads the wrong rows with zero indication of failure.
+
+**New findings and versioning architecture (2026-07-01, third pass — see `phpp-concerns-and-examples.md` #24-25 for full evidence):**
+
+- ~~**`<Name> SI` tabs in IP-shell workbooks are formula mirrors of the base tab, not independent data**~~ — **Fixed 2026-07-01.** Sampling formula-vs-value ratios across all 28 worksheet pairs in `Example_IP.xlsx` showed a minority of worksheets where the SI tab has noticeably more formula cells than the base tab — exactly where genuine input cells live on the base tab and get mirrored onto the SI tab via `=IF(...)`-style passthrough formulas for unit-converted display. Since `skip_formulas` treats any formula cell as "not a real input," the old `prefer_si_sheet()` default silently discarded real designer input workbook-wide, not just in `ADDNL_VENT`. Fixed by deleting `prefer_si_sheet()` and moving to per-version explicit sheet names (see the SI/IP concern above).
+- ~~**`Climate.ud_block`'s `summer_delta_t_unit` had a bogus `DELTA-C` "column" value**~~ — **Fixed 2026-07-01.** Every sibling row in that column-fields table maps to a real 1-3 letter column; this one had the literal string `DELTA-C` — a stray unit annotation in the wrong table cell. Harmless on PHX_pyxl (`col_to_idx("DELTA-C")` silently produces a nonsensical but non-crashing index) but crashed PHX_xlwg's live AppleScript call outright when discovered during the Stage D port. Removed from all four field map copies (`EN_10_6_SI.md`/`EN_10_6_IP.md` × PHX_pyxl/PHX_xlwg) — it never represented a real column mapping and nothing consumed the key.
+- **Field map is now versioned.** `phpp-field-mapping/EN_10_6_IP.md` and `EN_10_6_SI.md` replace the single `phpp-field-mapping.md`, selected via `--phpp-version` (default `EN_10_6_IP`). Adopted from the architectural pattern in `PH-Tools/PHX`'s `phpp_localization/` directory (one shape file per language/version/unit-variant) — though nothing was copied from that GPL-3.0 project; both files here are independently authored and verified against this project's own `Example_IP.xlsx`/`Example_SI.xlsx`.
 
 ### openpyxl
 

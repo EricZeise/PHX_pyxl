@@ -1,6 +1,8 @@
-# PHPP Field Mapping Reference
+# PHPP Field Mapping Reference — EN_10_6_IP
 
-Localization map for **PHPP 10.6 (English)**. This document describes how PHX locates and reads/writes cells in each PHPP worksheet.
+Localization map for **PHPP 10.6 (English, IP units)**. Targets an IP-shell PHPP workbook that also carries `<Name> SI`-suffixed mirror tabs (formula passthroughs of the base tab, used for SI-unit display only) — verified against `Data/Example_IP.xlsx`/`Data/Empty_IP.xlsx`. Sheet names are the same base (non-suffixed) names as EN_10_6_SI — reading/writing always targets the base tab directly, never the `<Name> SI` mirror, since the mirror tabs are formula-driven passthroughs and would silently lose designer-entered input under `skip_formulas`. The only content difference from EN_10_6_SI is locator strings for the handful of fields whose label text embeds a unit marker (`[°F]` vs `[°C]`, confirmed via direct verification against both file types); everything else is identical.
+
+This document describes how PHX locates and reads/writes cells in each PHPP worksheet.
 
 !!! note "Locator pattern"
     PHX locates fields by searching for `locator_string` in `locator_col`, then reads/writes at `input_column` offset by `input_row_offset` rows from the found row.
@@ -23,8 +25,8 @@ Worksheet key: `VERIFICATION`
 | `phi_enerphit_type` | New building / Retrofit | T | T | 1 |  | `1`: 1-New building; `2`: 2-Retrofit; `3`: 3-Staged retrofit |
 | `phi_retrofit_type` | New building / Retrofit | T | T | 1 |  | `1`: 1-New building; `2`: 2-Retrofit; `3`: 3-Staged retrofit |
 | `num_of_units` | No. of dwelling units: | E | F | 0 |  |  |
-| `setpoint_winter` | Interior temperature winter [°C]: | J | K | 0 | C |  |
-| `setpoint_summer` | Interior temp. summer [°C]: | M | N | 0 | C |  |
+| `setpoint_winter` | Interior temperature winter [°F]: | J | K | 0 | F |  |
+| `setpoint_summer` | Interior temp. summer [°F]: | M | N | 0 | F |  |
 | `mechanical_cooling` | Mechanical cooling: | M | N | 0 |  |  |
 
 ---
@@ -35,7 +37,7 @@ Worksheet key: `VARIANTS`
 
 **Configuration:**
 
-- `active_value_column`: `E`
+- `active_value_column` (literal): `E`
 
 ### results_header
 
@@ -49,13 +51,13 @@ Worksheet key: `VARIANTS`
 
 - Header locator: col `C`, string `"Building assembly layers"`
 
-- `input_col`: `C`
+- `input_col` (literal): `C`
 
 ### windows
 
 - Header locator: col `C`, string `"Windows and shading"`
 
-- `input_col`: `C`
+- `input_col` (literal): `C`
 
 ### ventilation
 
@@ -63,13 +65,13 @@ Worksheet key: `VARIANTS`
 
 **Input item names:**
 
-- `vent_type`: "Ventilation type"
-- `air_change_rate`: "Air change rate at pressurisation test (n50)"
-- `design_flow_rate`: "Design air flow rate (maximum)"
-- `install_location`: "Installation site ventilation unit"
-- `ventilator_unit`: "Ventilation unit selection"
+- `vent_type` (literal): "Ventilation type"
+- `air_change_rate` (literal): "Air change rate at pressurisation test (n50)"
+- `design_flow_rate` (literal): "Design air flow rate (maximum)"
+- `install_location` (literal): "Installation site ventilation unit"
+- `ventilator_unit` (literal): "Ventilation unit selection"
 
-- `input_col`: `C`
+- `input_col` (literal): `C`
 
 ---
 
@@ -88,15 +90,15 @@ Worksheet key: `CLIMATE`
 
 ### active_block
 
-- `start_row`: `26`
-- `end_row`: `36`
-- `start_col`: `D`
-- `end_col`: `U`
+- `start_row` (literal): `26`
+- `end_row` (literal): `36`
+- `start_col` (literal): `D`
+- `end_col` (literal): `U`
 
 ### ud_block
 
 - Header locator: col `Name of location`, string `""`
-- `start_row`: `67`
+- `start_row` (literal): `67`
 
 | Field | Column |
 |-------|--------|
@@ -123,7 +125,6 @@ Worksheet key: `CLIMATE`
 | `elevation_unit` | M |
 | `display_name` | L |
 | `summer_delta_t` | N |
-| `summer_delta_t_unit` | DELTA-C |
 | `source` | P |
 
 | Field | Row | Unit |
@@ -139,17 +140,17 @@ Worksheet key: `CLIMATE`
 
 ### named_ranges
 
-- `country`: `Klima_Region`
-- `region`: `Klima_Region2`
-- `data_set`: `Klima_Standort`
+- `country` (named_range): `Klima_Region`
+- `region` (named_range): `Klima_Region2`
+- `data_set` (named_range): `Klima_Standort`
 
 ### defined_ranges
 
-- `climate_zone`: `D13`
-- `weather_station_altitude`: `D17`
-- `site_altitude`: `D18`
-- `latitude`: `F25`
-- `longitude`: `H25`
+- `climate_zone` (address): `D13`
+- `weather_station_altitude` (address): `D17`
+- `site_altitude` (address): `D18`
+- `latitude` (address): `F25`
+- `longitude` (address): `H25`
 
 ---
 
@@ -183,15 +184,15 @@ Worksheet key: `UVALUES`
 
 **Row offsets within each assembly block:**
 
-- `phpp_id_num_col_offset`: `5`
-- `name_row_offset`: `2`
-- `rsi_row_offset`: `4`
-- `rse_row_offset`: `5`
-- `first_layer_row_offset`: `7`
-- `last_layer_row_offset`: `14`
-- `result_val_row_offset`: `19`
-- `result_val_col`: `R`
-- `result_val_unit`: `W/M2K`
+- `phpp_id_num_col_offset` (literal): `5`
+- `name_row_offset` (literal): `2`
+- `rsi_row_offset` (literal): `4`
+- `rse_row_offset` (literal): `5`
+- `first_layer_row_offset` (literal): `7`
+- `last_layer_row_offset` (literal): `14`
+- `result_val_row_offset` (literal): `19`
+- `result_val_col` (literal): `R`
+- `result_val_unit` (literal): `W/M2K`
 
 ---
 
@@ -205,11 +206,11 @@ Worksheet key: `AREAS`
 
 ### summary_rows
 
-- `temp_zones`: `K`
-- `area_type`: `M`
-- `group_number`: `N`
-- `area`: `L`
-- `average_u_value`: `P`
+- `temp_zones` (literal): `K`
+- `area_type` (literal): `M`
+- `group_number` (literal): `N`
+- `area` (literal): `L`
+- `average_u_value` (literal): `P`
 
 ### surface_rows
 
@@ -259,9 +260,9 @@ Worksheet key: `COMPONENTS`
 
 ### glazings
 
-- `entry_column`: `IH`
-- `entry_start_row`: `13`
-- `header_start_row`: `8`
+- `entry_column` (literal): `IH`
+- `entry_start_row` (literal): `13`
+- `header_start_row` (literal): `8`
 
 | Field | Column | Unit |
 |-------|--------|------|
@@ -405,7 +406,7 @@ Worksheet key: `VENTILATION`
 
 **Configuration:**
 
-- `variants_col`: `D`
+- `variants_col` (literal): `D`
 
 ---
 
@@ -417,7 +418,7 @@ Worksheet key: `ADDNL_VENT`
 
 - Header locator: col `C`, string `"Room"`
 - Entry locator: col `C`, string `"1"`
-- `last_col`: `Z`
+- `last_col` (literal): `Z`
 
 | Field | Column | Unit |
 |-------|--------|------|
@@ -493,17 +494,17 @@ Worksheet key: `HEATING_DEMAND`
 
 **Configuration:**
 
-- `unit`: `kWh`
-- `col_kWh_year`: `O`
-- `col_kWh_m2_year`: `Q`
-- `row_total_losses_transmission`: `27`
-- `row_total_losses_ventilation`: `43`
-- `row_total_losses`: `45`
-- `row_total_gains_solar`: `61`
-- `row_total_gains_internal`: `65`
-- `row_utilization_factor`: `72`
-- `row_useful_gains`: `74`
-- `row_annual_demand`: `78`
+- `unit` (literal): `kWh`
+- `col_kWh_year` (literal): `O`
+- `col_kWh_m2_year` (literal): `Q`
+- `row_total_losses_transmission` (literal): `27`
+- `row_total_losses_ventilation` (literal): `43`
+- `row_total_losses` (literal): `45`
+- `row_total_gains_solar` (literal): `61`
+- `row_total_gains_internal` (literal): `65`
+- `row_utilization_factor` (literal): `72`
+- `row_useful_gains` (literal): `74`
+- `row_annual_demand` (literal): `78`
 
 ---
 
@@ -513,16 +514,16 @@ Worksheet key: `HEATING_PEAK_LOAD`
 
 **Configuration:**
 
-- `unit`: `W`
-- `col_weather_1`: `P`
-- `col_weather_2`: `R`
-- `row_total_losses_transmission`: `44`
-- `row_total_losses_ventilation`: `57`
-- `row_total_losses`: `60`
-- `row_total_gains_solar`: `73`
-- `row_total_gains_internal`: `77`
-- `row_total_gains`: `80`
-- `row_total_load`: `88`
+- `unit` (literal): `W`
+- `col_weather_1` (literal): `P`
+- `col_weather_2` (literal): `R`
+- `row_total_losses_transmission` (literal): `44`
+- `row_total_losses_ventilation` (literal): `57`
+- `row_total_losses` (literal): `60`
+- `row_total_gains_solar` (literal): `73`
+- `row_total_gains_internal` (literal): `77`
+- `row_total_gains` (literal): `80`
+- `row_total_load` (literal): `88`
 
 ---
 
@@ -532,21 +533,21 @@ Worksheet key: `COOLING_DEMAND`
 
 **Configuration:**
 
-- `unit`: `kWh`
-- `col_kWh_year`: `O`
-- `col_kWh_m2_year`: `Q`
-- `row_total_losses_transmission`: `29`
-- `row_total_losses_ventilation`: `57`
-- `row_total_losses`: `59`
-- `row_utilization_factor`: `84`
-- `row_useful_losses`: `86`
-- `row_total_gains_solar`: `73`
-- `row_total_gains_internal`: `77`
-- `row_total_gains`: `79`
-- `row_annual_sensible_demand`: `88`
-- `row_annual_latent_demand`: `94`
-- `address_specific_latent_cooling_demand`: `AN176`
-- `address_tfa`: `O8`
+- `unit` (literal): `kWh`
+- `col_kWh_year` (literal): `O`
+- `col_kWh_m2_year` (literal): `Q`
+- `row_total_losses_transmission` (literal): `29`
+- `row_total_losses_ventilation` (literal): `57`
+- `row_total_losses` (literal): `59`
+- `row_utilization_factor` (literal): `84`
+- `row_useful_losses` (literal): `86`
+- `row_total_gains_solar` (literal): `73`
+- `row_total_gains_internal` (literal): `77`
+- `row_total_gains` (literal): `79`
+- `row_annual_sensible_demand` (literal): `88`
+- `row_annual_latent_demand` (literal): `94`
+- `address_specific_latent_cooling_demand` (address): `AN176`
+- `address_tfa` (address): `O8`
 
 ---
 
@@ -556,15 +557,15 @@ Worksheet key: `COOLING_PEAK_LOAD`
 
 **Configuration:**
 
-- `unit`: `W`
-- `col_weather_1`: `P`
-- `col_weather_2`: `R`
-- `row_total_losses_transmission`: `35`
-- `row_total_losses_ventilation`: `43`
-- `row_total_gains_solar`: `56`
-- `row_total_gains_internal`: `60`
-- `row_total_sensible_load`: `64`
-- `row_total_latent_load`: `93`
+- `unit` (literal): `W`
+- `col_weather_1` (literal): `P`
+- `col_weather_2` (literal): `R`
+- `row_total_losses_transmission` (literal): `35`
+- `row_total_losses_ventilation` (literal): `43`
+- `row_total_gains_solar` (literal): `56`
+- `row_total_gains_internal` (literal): `60`
+- `row_total_sensible_load` (literal): `64`
+- `row_total_latent_load` (literal): `93`
 
 ---
 
@@ -580,33 +581,33 @@ Worksheet key: `COOLING_UNITS`
 
 **Configuration:**
 
-- `SEER_unit`: `W/W`
+- `SEER_unit` (literal): `W/W`
 
 ### supply_air
 
-- `used`: `Kuehlgeraete_Zuluft_Kuehlung_Ankreuzen`
-- `num_units`: `Kuehlgeraete_Kompressor_Zuluft_Anzahl`
-- `device_type_name`: `Kuehlgeraete_Kompressor_Zuluft_Geraet`
-- `SEER`: `X32`
+- `used` (named_range): `Kuehlgeraete_Zuluft_Kuehlung_Ankreuzen`
+- `num_units` (named_range): `Kuehlgeraete_Kompressor_Zuluft_Anzahl`
+- `device_type_name` (named_range): `Kuehlgeraete_Kompressor_Zuluft_Geraet`
+- `SEER` (address): `X32`
 
 ### recirculation_air
 
-- `used`: `Kuehlgeraete_Umluft_Kuehlung_Ankreuzen`
-- `num_units`: `Kuehlgeraete_Kompressor_Umluft_Anzahl`
-- `device_type_name`: `Kuehlgeraete_Kompressor_Umluft_Geraet`
-- `SEER`: `X50`
+- `used` (named_range): `Kuehlgeraete_Umluft_Kuehlung_Ankreuzen`
+- `num_units` (named_range): `Kuehlgeraete_Kompressor_Umluft_Anzahl`
+- `device_type_name` (named_range): `Kuehlgeraete_Kompressor_Umluft_Geraet`
+- `SEER` (address): `X50`
 
 ### dehumidification
 
-- `used`: `Kuehlgeraete_Zusaetzliche_Entfeuchtung_Ankreuzen`
-- `waste_heat_to_room`: `Kuehlgeraete_Zusaetzliche_Entfeuchtung_Abwaerme`
-- `SEER`: `Kuehlgeraete_Zusaetzliche_Entfeuchtung_JAZ`
+- `used` (named_range): `Kuehlgeraete_Zusaetzliche_Entfeuchtung_Ankreuzen`
+- `waste_heat_to_room` (named_range): `Kuehlgeraete_Zusaetzliche_Entfeuchtung_Abwaerme`
+- `SEER` (named_range): `Kuehlgeraete_Zusaetzliche_Entfeuchtung_JAZ`
 
 ### panel
 
-- `used`: `Kuehlgeraete_Flaechenkuehlung_Ankreuzen`
-- `device_type_name`: `Kuehlgeraete_Kompressor_Flaechenkuehlung_Geraet`
-- `SEER`: `X69`
+- `used` (named_range): `Kuehlgeraete_Flaechenkuehlung_Ankreuzen`
+- `device_type_name` (named_range): `Kuehlgeraete_Kompressor_Flaechenkuehlung_Geraet`
+- `SEER` (address): `X69`
 
 ---
 
@@ -618,7 +619,7 @@ Worksheet key: `DHW`
 
 - Header locator: col `D`, string `"DHW distribution"`
 - Entry locator: col `E`, string `"DHW circulation pipes or, for heat interface units, forward and return flows"`
-- `input_col_start`: `J`
+- `input_col_start` (literal): `J`
 
 | Field | Row Offset | Unit |
 |-------|-----------|------|
@@ -634,7 +635,7 @@ Worksheet key: `DHW`
 
 - Header locator: col `D`, string `"DHW distribution"`
 - Entry locator: col `E`, string `"DHW stub pipes / individual pipes"`
-- `input_col_start`: `J`
+- `input_col_start` (literal): `J`
 
 | Field | Row Offset | Unit |
 |-------|-----------|------|
@@ -647,7 +648,7 @@ Worksheet key: `DHW`
 
 - Header locator: col `D`, string `"Storage heat losses"`
 - Entry locator: col `J`, string `"Storage type 1"`
-- `entry_row_start`: `191`
+- `entry_row_start` (literal): `191`
 
 | Field | Column |
 |-------|--------|
@@ -676,16 +677,16 @@ Worksheet key: `SOLAR_DHW`
 
 **Configuration:**
 
-- `footprint_unit`: `M2`
-- `energy_unit`: `KHW`
+- `footprint_unit` (literal): `M2`
+- `energy_unit` (literal): `KHW`
 
 ### ranges
 
-- `footprint`: `SolarWW_Kollektorflaeche`
-- `annual_dhw_contribution`: `N34`
-- `annual_dhw_energy`: `P34`
-- `annual_heating_contribution`: `N35`
-- `annual_heating_energy`: `P35`
+- `footprint` (named_range): `SolarWW_Kollektorflaeche`
+- `annual_dhw_contribution` (address): `N34`
+- `annual_dhw_energy` (address): `P34`
+- `annual_heating_contribution` (address): `N35`
+- `annual_heating_energy` (address): `P35`
 
 ---
 
@@ -695,23 +696,23 @@ Worksheet key: `SOLAR_PV`
 
 **Configuration:**
 
-- `footprint_unit`: `M2`
-- `energy_unit`: `KWH`
+- `footprint_unit` (literal): `M2`
+- `energy_unit` (literal): `KWH`
 
 ### columns
 
-- `systems_start`: `S`
-- `systems_end`: `W`
+- `systems_start` (literal): `S`
+- `systems_end` (literal): `W`
 
 ### rows
 
-- `systems_start`: `10`
-- `current`: `20`
-- `voltage`: `21`
-- `num_panels`: `29`
-- `footprint`: `37`
-- `annual_energy`: `42`
-- `systems_end`: `47`
+- `systems_start` (literal): `10`
+- `current` (literal): `20`
+- `voltage` (literal): `21`
+- `num_panels` (literal): `29`
+- `footprint` (literal): `37`
+- `annual_energy` (literal): `42`
+- `systems_end` (literal): `47`
 
 ---
 
@@ -721,14 +722,14 @@ Worksheet key: `ELECTRICITY`
 
 ### input_columns
 
-- `selection`: `E`
-- `used`: `E`
-- `in_conditioned_space`: `F`
-- `energy_demand_per_use`: `N`
-- `utilization_factor`: `H`
-- `frequency`: `K`
-- `reference_quantity`: `I`
-- `annual_energy_demand`: `AB`
+- `selection` (literal): `E`
+- `used` (literal): `E`
+- `in_conditioned_space` (literal): `F`
+- `energy_demand_per_use` (literal): `N`
+- `utilization_factor` (literal): `H`
+- `frequency` (literal): `K`
+- `reference_quantity` (literal): `I`
+- `annual_energy_demand` (literal): `AB`
 
 ### input_rows
 
@@ -810,62 +811,62 @@ Worksheet key: `PER`
 
 **Configuration:**
 
-- `locator_col`: `P`
-- `unit`: `KWH`
+- `locator_col` (literal): `P`
+- `unit` (literal): `KWH`
 
 ### named_ranges
 
-- `heating_type_1`: `PE_Waermeerzeuger_primaer`
-- `heating_type_2`: `PE_Waermeerzeuger_sekundaer`
+- `heating_type_1` (named_range): `PE_Waermeerzeuger_primaer`
+- `heating_type_2` (named_range): `PE_Waermeerzeuger_sekundaer`
 
 ### columns
 
-- `calculated_efficiency`: `Q`
-- `user_determined_efficiency`: `R`
-- `final_energy`: `T`
-- `per_energy`: `V`
-- `pe_energy`: `X`
-- `co2_emissions`: `Z`
+- `calculated_efficiency` (literal): `Q`
+- `user_determined_efficiency` (literal): `R`
+- `final_energy` (literal): `T`
+- `per_energy` (literal): `V`
+- `pe_energy` (literal): `X`
+- `co2_emissions` (literal): `Z`
 
 ### addresses
 
-- `tfa`: `Z7`
-- `footprint`: `Z8`
+- `tfa` (address): `Z7`
+- `footprint` (address): `Z8`
 
 ### heating_types
 
-- `range_start`: `P8`
-- `range_end`: `T11`
+- `range_start` (address): `P8`
+- `range_end` (address): `T11`
 
 ### heating
 
-- `locator_string_heading`: `Heating`
-- `locator_string_start`: `Electricity (HP compact unit)`
+- `locator_string_heading` (literal): `Heating`
+- `locator_string_start` (literal): `Electricity (HP compact unit)`
 
 ### cooling
 
-- `locator_string_heading`: `Cooling and dehumidification`
-- `locator_string_start`: `Electricity cooling (HP)`
+- `locator_string_heading` (literal): `Cooling and dehumidification`
+- `locator_string_start` (literal): `Electricity cooling (HP)`
 
 ### dhw
 
-- `locator_string_heading`: `DHW generation`
-- `locator_string_start`: `Electricity (HP compact unit)`
+- `locator_string_heading` (literal): `DHW generation`
+- `locator_string_start` (literal): `Electricity (HP compact unit)`
 
 ### household_electric
 
-- `locator_string_heading`: `Occupant electricity + auxiliary electricity (other)`
-- `locator_string_start`: `User electricity (lighting, electrical devices, etc.)`
+- `locator_string_heading` (literal): `Occupant electricity + auxiliary electricity (other)`
+- `locator_string_start` (literal): `User electricity (lighting, electrical devices, etc.)`
 
 ### additional_gas
 
-- `locator_string_heading`: `Additional gas demand`
-- `locator_string_start`: `Drying/Cooking`
+- `locator_string_heading` (literal): `Additional gas demand`
+- `locator_string_start` (literal): `Drying/Cooking`
 
 ### energy_generation
 
-- `locator_string_heading`: `Energy generation`
-- `locator_string_start`: `PV electricity`
+- `locator_string_heading` (literal): `Energy generation`
+- `locator_string_start` (literal): `PV electricity`
 
 ---
 
@@ -898,11 +899,11 @@ Worksheet key: `OVERVIEW`
 
 ### basic_data
 
-- `address_number_dwellings_res`: `C27`
-- `address_number_dwellings_nonres`: `E27`
-- `address_number_occupants_res`: `C28`
-- `address_number_occupants_nonres`: `E28`
-- `address_project_name`: `C11`
+- `address_number_dwellings_res` (address): `C27`
+- `address_number_dwellings_nonres` (address): `E27`
+- `address_number_occupants_res` (address): `C28`
+- `address_number_occupants_nonres` (address): `E28`
+- `address_project_name` (address): `C11`
 
 ### building_envelope
 
