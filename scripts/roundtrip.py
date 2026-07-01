@@ -18,14 +18,15 @@ PART 1 — No Excel required (pure openpyxl):
                          cell addresses and verifies every written cell.
 
 PART 2 — Excel required (xlwings, optional):
-  Phase 5 (recalculate): Open both source and written workbooks in Excel.
-                         Excel recalculates all formulas in the written file.
-  Phase 6 (compare all): Read ALL cells from both (inputs + formula results)
-                         via xlwings and compare. Formula results should match
-                         if all inputs were written correctly.
+  Phase 5 (Excel read):  Read the original source via xlwings+Excel to
+                         compare live-recalculated values against openpyxl's
+                         cached values from Part 1.
 
 Part 2 is skipped if xlwings or Excel is not available. Part 1 alone
 confirms input data fidelity without any Excel dependency.
+
+See also: scripts/verify_excel.py — post-Excel full-fidelity comparison
+(run after manually opening both files in Excel and saving).
 """
 
 from __future__ import annotations
@@ -212,7 +213,7 @@ def _compare_full(
     orig_data: dict[str, Any],
     written_data: dict[str, Any],
 ) -> tuple[int, int, list[str]]:
-    """Compare all fields between two xlwings full-reads."""
+    """Compare all fields between two full-reads."""
     checked = 0
     mismatched = 0
     details: list[str] = []

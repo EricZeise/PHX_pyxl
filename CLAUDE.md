@@ -63,7 +63,8 @@ PHX_pyxl/
 │   │   └── models.py            ← Pydantic models for building record JSON
 │   └── compare_json/            ← Standalone JSON diff tool
 ├── scripts/
-│   └── roundtrip.py             ← Two-part roundtrip test
+│   ├── roundtrip.py             ← Two-part roundtrip test (Parts 1 & 2)
+│   └── verify_excel.py          ← Post-Excel full-fidelity comparison
 ├── tests/
 └── records/                     ← Output directory for JSON building records
 ```
@@ -87,6 +88,9 @@ phpp-tool write records/my_building.json path/to/blank_PHPP.xlsx -o output.xlsx
 
 # Roundtrip test (Part 1: openpyxl only; Part 2: xlwings+Excel if available)
 python scripts/roundtrip.py Data/Example.xlsx Data/Empty.xlsx
+
+# Post-Excel verification (after manually opening both files in Excel and saving)
+python scripts/verify_excel.py Data/Example.xlsx records/.../Example_written.xlsx
 ```
 
 ---
