@@ -4,7 +4,7 @@
 
 A Python CLI that **reads designer-entered input data from a filled PHPP workbook** (Passive House Planning Package), **stores it as a portable JSON record**, and **writes that record back into a blank PHPP workbook**.
 
-This is the **openpyxl-only** variant — it does **not require Excel to be installed** for reading or writing. It uses openpyxl's dual-load approach: `data_only=True` for cached values and label searching, `data_only=False` for formula detection.
+This is the **openpyxl-only** variant — it does **not require Excel to be installed** for reading or writing. Reading uses openpyxl's dual-load approach: `data_only=True` for cached values and label searching, `data_only=False` for formula detection. Writing resolves addresses via openpyxl (read-only) but persists cell values via a surgical ZIP/XML patch (`surgical_writer.py`, using `lxml`) rather than openpyxl's save — this preserves `<extLst>` extensions (Data Validation, etc.) and `<headerFooter>` content that an openpyxl save would otherwise drop.
 
 ### MVP pipeline
 
@@ -14,7 +14,7 @@ Filled PHPP (.xlsx)  →  read  →  JSON record  →  write  →  Blank PHPP (.
 
 ### Relationship to PHX_xlwg
 
-PHX_xlwg uses xlwings (requires Excel) for live formula recalculation and cell addressing. PHX_pyxl uses the same field map, models, and map parser but replaces xlwings with openpyxl's dual-load approach. The trade-off: no Excel dependency, but formula results are cached (not recalculated) and openpyxl's save strips some Excel extensions.
+PHX_xlwg uses xlwings (requires Excel) for live formula recalculation and cell addressing. PHX_pyxl uses the same field map, models, and map parser but replaces xlwings with openpyxl's dual-load approach. The trade-off: no Excel dependency, but formula results are cached (not recalculated). Both projects persist writes via the same surgical ZIP/XML patch, so file integrity on write is now equivalent between them.
 
 ---
 
@@ -28,7 +28,7 @@ phpp-field-mapping.md   (locator dictionary — where each field lives)
    locators.py          (6 addressing strategies, openpyxl dual-load)
         ↓
  ┌──────┴──────┐
- reader.py    writer.py  (pure openpyxl — no Excel needed)
+ reader.py    writer.py  (openpyxl resolution + surgical XML persistence)
  └──────┬──────┘
      models.py           (pydantic validation)
         ↓
@@ -50,7 +50,7 @@ Locator functions accept a `WsPair = tuple[Worksheet, Worksheet]` (values sheet,
 ```
 PHX_pyxl/
 ├── CLAUDE.md                    ← this file
-├── pyproject.toml               ← deps: openpyxl, click, pydantic (NO xlwings)
+├── pyproject.toml               ← deps: openpyxl, lxml, click, pydantic (NO xlwings)
 ├── phpp-field-mapping.md        ← the locator dictionary (31 worksheets)
 ├── src/
 │   ├── phpp_tool/
@@ -59,7 +59,8 @@ PHX_pyxl/
 │   │   ├── map_parser.py        ← Parse phpp-field-mapping.md → structured dict
 │   │   ├── locators.py          ← 6 addressing strategies (openpyxl dual-load)
 │   │   ├── reader.py            ← openpyxl-based reader
-│   │   ├── writer.py            ← Pure openpyxl writer
+│   │   ├── writer.py            ← Resolves addresses via openpyxl, collects writes
+│   │   ├── surgical_writer.py   ← Persists writes via ZIP/XML patch (lxml), preserving extLst/headerFooter
 │   │   └── models.py            ← Pydantic models for building record JSON
 │   └── compare_json/            ← Standalone JSON diff tool
 ├── scripts/
@@ -100,5 +101,5 @@ python scripts/verify_excel.py Data/Example.xlsx records/.../Example_written.xls
 - **Never read or embed PHPP formulas** — only designer-entered input values.
 - **The field map is the single source of truth** for cell locations.
 - **No Excel required** for reading, writing, or Part 1 verification.
-- **openpyxl save degrades the file** — data validation extensions and custom headers are stripped. Written files are data artifacts, not production PHPP files.
+- **Writes preserve file integrity** — persistence goes through `surgical_writer.py`'s ZIP/XML patch, not openpyxl's save, so `<extLst>` extensions (Data Validation, etc.) and `<headerFooter>` content survive the round trip. Verified byte-for-byte across all 83 sheets of a full roundtrip write.
 - **Cached formula values** — without Excel, formula results reflect the last Excel save, not a live recalculation. Part 2 of the roundtrip test uses xlwings+Excel (optional) to verify recalculation integrity.
