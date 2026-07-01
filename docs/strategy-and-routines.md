@@ -8,7 +8,7 @@ Read designer-entered input data from a filled PHPP workbook (Passive House Plan
 
 ### Why openpyxl (and why not xlwings)
 
-The sibling project PHX_xlw uses xlwings to drive a live Excel instance for reading and writing. This works well on machines where Excel is installed, but introduces hard dependencies: Excel must be present, AppleScript (macOS) or COM (Windows) must be functional, and the process is bound to a GUI application's lifecycle. macOS 26 introduced an AppleScript bug where Excel save operations hang indefinitely on large workbooks, forcing PHX_xlw into a hybrid architecture.
+The sibling project PHX_xlwg uses xlwings to drive a live Excel instance for reading and writing. This works well on machines where Excel is installed, but introduces hard dependencies: Excel must be present, AppleScript (macOS) or COM (Windows) must be functional, and the process is bound to a GUI application's lifecycle. macOS 26 introduced an AppleScript bug where Excel save operations hang indefinitely on large workbooks, forcing PHX_xlwg into a hybrid architecture.
 
 PHX_pyxl eliminates these dependencies entirely. openpyxl is a pure-Python library that reads and writes .xlsx files as XML archives — no Excel required. The trade-off is that formula results are cached (not recalculated), but for a tool whose purpose is transferring *input* values between workbooks, cached formula results are irrelevant: the tool only reads and writes input cells.
 
@@ -85,7 +85,7 @@ The roundtrip test confirms data fidelity end to end. The writer returns its ful
 
 ### `locators.py` — Cell resolution (six strategies, openpyxl dual-load)
 
-**Strategy role:** The bridge between the field map's abstract locator specs and actual cell values. Every reader and writer function calls into this module. Unlike PHX_xlw (which uses xlwings range objects), all functions here operate on openpyxl `Worksheet` objects paired as `WsPair`.
+**Strategy role:** The bridge between the field map's abstract locator specs and actual cell values. Every reader and writer function calls into this module. Unlike PHX_xlwg (which uses xlwings range objects), all functions here operate on openpyxl `Worksheet` objects paired as `WsPair`.
 
 #### Helpers
 
@@ -345,9 +345,9 @@ phpp-tool inspect-map
 
 Lists every mapped worksheet with counts of fields, sections, and config items. Useful for verifying field map coverage after edits.
 
-### Comparison with PHX_xlw
+### Comparison with PHX_xlwg
 
-| Concern | PHX_xlw (xlwings) | PHX_pyxl (openpyxl) |
+| Concern | PHX_xlwg (xlwings) | PHX_pyxl (openpyxl) |
 |---------|-------------------|---------------------|
 | Excel requirement | Yes (read + write) | No |
 | Formula values | Live recalculation | Cached (from last Excel save) |

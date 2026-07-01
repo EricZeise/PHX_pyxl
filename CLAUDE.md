@@ -12,9 +12,9 @@ This is the **openpyxl-only** variant — it does **not require Excel to be inst
 Filled PHPP (.xlsx)  →  read  →  JSON record  →  write  →  Blank PHPP (.xlsx)
 ```
 
-### Relationship to PHX_xlw
+### Relationship to PHX_xlwg
 
-PHX_xlw uses xlwings (requires Excel) for live formula recalculation and cell addressing. PHX_pyxl uses the same field map, models, and map parser but replaces xlwings with openpyxl's dual-load approach. The trade-off: no Excel dependency, but formula results are cached (not recalculated) and openpyxl's save strips some Excel extensions.
+PHX_xlwg uses xlwings (requires Excel) for live formula recalculation and cell addressing. PHX_pyxl uses the same field map, models, and map parser but replaces xlwings with openpyxl's dual-load approach. The trade-off: no Excel dependency, but formula results are cached (not recalculated) and openpyxl's save strips some Excel extensions.
 
 ---
 
