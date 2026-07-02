@@ -47,6 +47,23 @@ def norm(value: Any) -> str:
     return s.strip().casefold()
 
 
+def resolve_sheet_name(sheet_name: str, sheet_names: list[str]) -> str | None:
+    """Case-insensitively resolve *sheet_name* against real workbook sheets.
+
+    Excel doesn't allow two sheets to coexist with names differing only by
+    case, so matching case-insensitively is always safe -- it can't
+    introduce ambiguity between two distinct real sheets. Returns the
+    actual, correctly-cased name (needed for exact-case downstream lookups
+    like ``wb[name]`` and the surgical writer's sheet map), or None if no
+    sheet matches even case-insensitively.
+    """
+    target = sheet_name.casefold()
+    for name in sheet_names:
+        if name.casefold() == target:
+            return name
+    return None
+
+
 def col_to_idx(col: str) -> int:
     """Convert column letters (A, ..., AA) to 1-based index."""
     result = 0
@@ -139,6 +156,23 @@ def is_entry_row_header(
 # Strategy 1: Label-anchored relative
 # ---------------------------------------------------------------------------
 
+def is_label_anchored_formula(
+    ws_pair: WsPair, locator_col: str, locator_string: str, input_col: str,
+    row_offset: int = 0,
+) -> bool | None:
+    """Return whether a label-anchored field's target cell is a formula.
+
+    Returns None if the label can't be found (caller should skip the
+    input/output cross-check rather than treat this as a mismatch).
+    """
+    ws_vals, ws_fmls = ws_pair
+    row = find_row_in_col(ws_vals, locator_col, locator_string)
+    if row is None:
+        return None
+    col_idx = col_to_idx(input_col)
+    return _is_formula(ws_fmls, col_idx, row + row_offset)
+
+
 def resolve_label_anchored(
     ws_pair: WsPair,
     locator_col: str,
@@ -192,30 +226,57 @@ def resolve_block(
         # feeding a bogus column letter to col_to_idx().
         entry_col = "A"
 
-    if entry_row_start is not None:
-        start_row = entry_row_start
-    else:
-        entry_string = entry_locator.get("string", "")
+    entry_string = entry_locator.get("string", "")
+
+    def _discover_start_row() -> tuple[int | None, bool]:
+        """Find the entry row by searching for the header + entry label.
+
+        Returns (start_row, header_found) -- header_found distinguishes
+        "header missing" from "entry label missing" for warning purposes.
+        """
         if not entry_string:
-            return []
+            return None, False
         hdr_row = find_row_in_col(
             ws_vals, header_locator["col"], header_locator["string"]
         )
         if hdr_row is None:
-            logger.warning(
-                "Block header %r not found in column %s",
-                header_locator["string"], header_locator["col"],
-            )
-            return []
+            return None, False
         start_row_found = find_row_in_col(
             ws_vals, entry_col, entry_string, start_from=hdr_row,
         )
         if start_row_found is None:
-            return []
+            return None, True
         if is_entry_row_header(ws_vals, start_row_found, column_fields):
-            start_row = max(start_row_found + 1, hdr_row)
-        else:
-            start_row = max(start_row_found, hdr_row)
+            return max(start_row_found + 1, hdr_row), True
+        return max(start_row_found, hdr_row), True
+
+    if entry_row_start is not None:
+        start_row = entry_row_start
+        # entry_row_start always wins (it's the authoritative override), but
+        # cross-check it against the discoverable label position -- if the
+        # two disagree, that's a sign the hardcoded row has drifted from the
+        # workbook's actual layout, so surface it instead of staying silent.
+        if entry_string:
+            discovered, _ = _discover_start_row()
+            if discovered is not None and discovered != entry_row_start:
+                logger.warning(
+                    "entry_row_start=%d for entry label %r in sheet %r "
+                    "disagrees with the discovered row %d -- using "
+                    "entry_row_start, but the field map may be stale",
+                    entry_row_start, entry_string, ws_vals.title, discovered,
+                )
+    else:
+        if not entry_string:
+            return []
+        discovered, header_found = _discover_start_row()
+        if discovered is None:
+            if not header_found:
+                logger.warning(
+                    "Block header %r not found in column %s",
+                    header_locator["string"], header_locator["col"],
+                )
+            return []
+        start_row = discovered
 
     last_row = ws_vals.max_row or 1
     if start_row > last_row:

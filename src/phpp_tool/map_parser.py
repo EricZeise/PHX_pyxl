@@ -20,19 +20,35 @@ class FieldMapError(Exception):
     """Raised when the field map markdown is malformed."""
 
 
+_parse_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
 def parse_field_map(path: str | Path) -> dict[str, Any]:
     """Parse the PHPP field mapping markdown into a structured dict.
 
     Returns a dict keyed by worksheet key (e.g. ``"VERIFICATION"``).
     Each value has ``sheet_name``, ``config``, ``fields``,
     and ``sections``.
+
+    Cached by resolved path + mtime -- a single process (e.g.
+    scripts/roundtrip.py, which calls this once per read/write) only
+    re-parses the ~900-line markdown file once per distinct on-disk state.
+    Callers must not mutate the returned dict; it's shared across calls.
     """
-    text = Path(path).read_text(encoding="utf-8")
+    resolved = str(Path(path).resolve())
+    mtime = Path(resolved).stat().st_mtime
+    cached = _parse_cache.get(resolved)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    text = Path(resolved).read_text(encoding="utf-8")
     result: dict[str, Any] = {}
     for heading, body in _split_on_heading(text, level=2):
         ws = _parse_worksheet(heading, body)
         if ws is not None:
             result[ws["worksheet_key"]] = ws
+
+    _parse_cache[resolved] = (mtime, result)
     return result
 
 
@@ -239,6 +255,7 @@ def _parse_label_row(cells: list[str]) -> dict[str, Any] | None:
     row) and pipe characters inside option values.
     """
     field_key: str | None = None
+    field_io: str | None = None
     label_parts: list[str] = []
     locator_col: str | None = None
     input_col: str | None = None
@@ -251,9 +268,10 @@ def _parse_label_row(cells: list[str]) -> dict[str, Any] | None:
         stripped = cell.strip()
 
         if state == "find_key":
-            m = re.match(r"^`(.+?)`$", stripped)
+            m = re.match(r"^`(.+?)`\s*(?:\((input|output)\))?$", stripped)
             if m:
                 field_key = m.group(1)
+                field_io = m.group(2)
                 state = "label"
             continue
 
@@ -298,6 +316,7 @@ def _parse_label_row(cells: list[str]) -> dict[str, Any] | None:
         "row_offset": row_offset,
         "unit": unit,
         "options": _parse_options(options_text) if options_text else None,
+        "io": field_io,
     }
 
 

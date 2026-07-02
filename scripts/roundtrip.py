@@ -43,7 +43,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from phpp_tool.locators import col_to_idx
+from phpp_tool.locators import col_to_idx, resolve_sheet_name
 from phpp_tool.reader import read_phpp
 from phpp_tool.writer import write_phpp
 
@@ -143,6 +143,31 @@ def _verify_writes(
 # Part 2: Excel-based full comparison (optional)
 # ======================================================================
 
+_MACOS_EXCEL_PATHS = [
+    "/Applications/Microsoft Office 2021/Microsoft Excel.app",
+    "/Applications/Microsoft Office 2019/Microsoft Excel.app",
+    "/Applications/Microsoft Office 2016/Microsoft Excel.app",
+    "/Applications/Microsoft Excel.app",
+]
+
+
+def _find_excel() -> str | None:
+    """Return the path to the newest known-good Excel install, or None.
+
+    xlwings' default (spec=None) app discovery is not reliable on this
+    machine when multiple Office versions are installed side-by-side --
+    it has resolved to an old Office 2011 copy that hangs on read/write
+    automation. Always prefer an explicit modern install (same fix as
+    PHX_xlwg's excel_app.py).
+    """
+    if sys.platform != "darwin":
+        return None
+    for p in _MACOS_EXCEL_PATHS:
+        if Path(p).exists():
+            return p
+    return None
+
+
 def _xlwings_full_read(path: Path, field_map: str) -> dict[str, Any] | None:
     """Read ALL cells via xlwings+Excel (skip_formulas=False).
 
@@ -156,7 +181,7 @@ def _xlwings_full_read(path: Path, field_map: str) -> dict[str, Any] | None:
     try:
         from phpp_tool.map_parser import parse_field_map
 
-        app = xw.App(visible=False, add_book=False)
+        app = xw.App(spec=_find_excel(), visible=False, add_book=False)
         app.display_alerts = False
     except Exception:
         return None
@@ -168,8 +193,8 @@ def _xlwings_full_read(path: Path, field_map: str) -> dict[str, Any] | None:
         result: dict[str, Any] = {}
 
         for ws_key, ws_spec in fm.items():
-            sheet_name = ws_spec["sheet_name"]
-            if sheet_name not in sheet_names:
+            sheet_name = resolve_sheet_name(ws_spec["sheet_name"], sheet_names)
+            if sheet_name is None:
                 continue
             ws = wb.sheets[sheet_name]
             ws_result: dict[str, Any] = {}

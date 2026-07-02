@@ -13,6 +13,7 @@ meaningfully written back.
 from __future__ import annotations
 
 import logging
+import re
 import warnings
 from pathlib import Path
 from typing import Any
@@ -25,12 +26,14 @@ from phpp_tool.locators import (
     WsPair,
     field_col,
     find_row_in_col,
+    is_label_anchored_formula,
     resolve_absolute,
     resolve_block,
     resolve_fixed,
     resolve_label_anchored,
     resolve_named_range,
     resolve_row_offset,
+    resolve_sheet_name,
 )
 from phpp_tool.map_parser import parse_field_map
 
@@ -61,10 +64,10 @@ def read_phpp(
         result: dict[str, Any] = {}
 
         for ws_key, ws_spec in field_map.items():
-            sheet_name = ws_spec["sheet_name"]
-            if sheet_name not in sheet_names:
+            sheet_name = resolve_sheet_name(ws_spec["sheet_name"], sheet_names)
+            if sheet_name is None:
                 logger.warning("Sheet %r not found, skipping %s",
-                               sheet_name, ws_key)
+                               ws_spec["sheet_name"], ws_key)
                 continue
             ws_pair: WsPair = (wb_vals[sheet_name], wb_fmls[sheet_name])
             ws_result = _read_worksheet(
@@ -124,6 +127,64 @@ def _read_worksheet(
 # Top-level fields (Strategy 1: label-anchored)
 # ---------------------------------------------------------------------------
 
+_OPTION_CODE_RE = re.compile(r"^(\w+)-")
+
+
+def _check_options(
+    field_name: str, val: Any, options: dict[str, str] | None,
+    sheet_name: str,
+) -> None:
+    """Warn if a resolved value's leading code isn't a documented option.
+
+    The field map's ``options`` metadata (e.g. ``10``: 10-Passive house)
+    is otherwise never cross-checked against what's actually in the
+    workbook -- this makes drift between documented and real values
+    visible instead of silently ignored.
+    """
+    if not options or not isinstance(val, str):
+        return
+    m = _OPTION_CODE_RE.match(val)
+    code = m.group(1) if m else val
+    if code not in options:
+        logger.warning(
+            "Field %r resolved to %r in sheet %r, which doesn't match any "
+            "documented option code (%s) -- field map options may be stale",
+            field_name, val, sheet_name, ", ".join(sorted(options)),
+        )
+
+
+def _check_io(
+    field_name: str, spec: dict, ws_pair: WsPair, sheet_name: str,
+) -> None:
+    """Warn if a field's declared io tag disagrees with its actual formula status.
+
+    The field map's io metadata (input/output) is otherwise never checked
+    against the workbook -- this surfaces drift instead of silently
+    trusting a tag that may no longer match the sheet's layout.
+    """
+    io = spec.get("io")
+    if io is None:
+        return
+    is_formula = is_label_anchored_formula(
+        ws_pair, spec["locator_col"], spec["locator_string"],
+        spec["input_col"], spec.get("row_offset", 0),
+    )
+    if is_formula is None:
+        return
+    if io == "input" and is_formula:
+        logger.warning(
+            "Field %r in sheet %r is tagged (input) but its cell contains "
+            "a formula -- field map may be stale",
+            field_name, sheet_name,
+        )
+    elif io == "output" and not is_formula:
+        logger.warning(
+            "Field %r in sheet %r is tagged (output) but its cell is a "
+            "literal value, not a formula -- field map may be stale",
+            field_name, sheet_name,
+        )
+
+
 def _read_label_anchored_fields(
     ws_pair: WsPair, fields: dict[str, dict],
     *, skip_formulas: bool = True,
@@ -140,6 +201,8 @@ def _read_label_anchored_fields(
             row_offset=spec.get("row_offset", 0),
             skip_formulas=skip_formulas,
         )
+        _check_options(field_name, val, spec.get("options"), ws_pair[0].title)
+        _check_io(field_name, spec, ws_pair, ws_pair[0].title)
         result[field_name] = val
     return result
 
@@ -274,13 +337,26 @@ def _read_column_row_section(
     *, skip_formulas: bool = True,
 ) -> dict[str, Any]:
     ws_vals, _ = ws_pair
+    entry_loc = sec_spec.get("entry_locator", {})
     if entry_row_start is None:
-        entry_loc = sec_spec.get("entry_locator", {})
         if entry_loc:
             entry_row_start = find_row_in_col(
                 ws_vals, entry_loc["col"], entry_loc["string"])
         if entry_row_start is None:
             return {}
+    elif entry_loc:
+        # entry_row_start always wins (it's the authoritative override), but
+        # cross-check it against the discoverable label position -- if the
+        # two disagree, that's a sign the hardcoded row has drifted from the
+        # workbook's actual layout, so surface it instead of staying silent.
+        discovered = find_row_in_col(ws_vals, entry_loc["col"], entry_loc["string"])
+        if discovered is not None and discovered != entry_row_start:
+            logger.warning(
+                "entry_row_start=%d for entry label %r in sheet %r "
+                "disagrees with the discovered row %d -- using "
+                "entry_row_start, but the field map may be stale",
+                entry_row_start, entry_loc["string"], ws_vals.title, discovered,
+            )
 
     result: dict[str, Any] = {}
     for col_name, col_spec in sec_spec["column_fields"].items():

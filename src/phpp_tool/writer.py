@@ -25,6 +25,7 @@ from phpp_tool.locators import (
     find_row_in_col,
     is_entry_row_header,
     parse_cell_ref,
+    resolve_sheet_name,
 )
 from phpp_tool.map_parser import parse_field_map
 from phpp_tool.surgical_writer import apply_surgical_writes
@@ -68,10 +69,10 @@ def write_phpp(
             if ws_spec is None:
                 logger.info("No field map entry for %r, skipping", ws_key)
                 continue
-            sheet_name = ws_spec["sheet_name"]
-            if sheet_name not in sheet_names:
+            sheet_name = resolve_sheet_name(ws_spec["sheet_name"], sheet_names)
+            if sheet_name is None:
                 logger.warning("Sheet %r not in template, skipping %s",
-                               sheet_name, ws_key)
+                               ws_spec["sheet_name"], ws_key)
                 continue
             ws_labels = wb_labels[sheet_name]
             total_writes += _write_worksheet(
@@ -142,6 +143,14 @@ def _write_label_anchored(
     for field_name, spec in fields.items():
         value = data.get(field_name)
         if value is None or not spec.get("locator_string"):
+            continue
+        if spec.get("io") == "output":
+            # Formula-driven result cell -- writing a literal here would
+            # overwrite the computed formula, corrupting the workbook.
+            logger.warning(
+                "Field %r is tagged (output), skipping write to avoid "
+                "overwriting a formula cell", field_name,
+            )
             continue
         row = find_row_in_col(ws_labels, spec["locator_col"],
                               spec["locator_string"])

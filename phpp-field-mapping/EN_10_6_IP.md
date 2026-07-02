@@ -15,19 +15,19 @@ Worksheet key: `VERIFICATION`
 
 | Field Key | Label (`locator_string`) | Locator Col | Input Col | Row Offset | Unit | Options |
 |-----------|-------------------------|-------------|-----------|------------|------|---------|
-| `phi_building_category_type` | Building use | R | T | 1 |  | `1`: 10-Residential building: Residential; `2`: 12-Residential building: Other; `11`: 10-Residential building: Residential; `12`: 12-Residential building: Other |
-| `phi_building_use_type` | Building use | R | T | 1 |  | `10`: 10-Residential building: Residential; `12`: 12-Residential building: Other; `20`: 20-Non-res building: Office/Administration; `21`: 21-Non-res building: School half-days (< 7 h); `22`: 22-Non-res building: School full-time (≥ 7 h); `23`: 23-Non-res.: Other |
-| `phi_building_ihg_type` | Building use | R | T | 4 |  | `2`: 2-Standard; `3`: 3-PHPP-calculation ('IHG' worksheet); `4`: 4-PHPP-calculation ('IHG non-res' worksheet) |
-| `phi_building_occupancy_type` | No. of occupants | R | R | 2 |  | `1`: *(null)*; `2`: *(null)* |
-| `phi_certification_type` | Planned energy standard | T | T | 1 |  | `10`: 10-Passive house; `21`: 21-EnerPHit (Component method); `22`: 22-EnerPHit (Energy demand method); `30`: 30-PHI Low Energy Building; `40`: 40-Other |
-| `phi_certification_class` | Class | Primary energy method | T | T | 1 |  | `10`: 10-Classic | PER (renewable); `11`: 11-Classic | PE (non-renewable); `20`: 20-Plus | PER (renewable); `30`: 30-Premium | PER (renewable) |
-| `phi_pe_type` | Primary energy demand criterion | T | T | 1 |  | `1`: 1-Standard; `2`: 2-Project-specific |
-| `phi_enerphit_type` | New building / Retrofit | T | T | 1 |  | `1`: 1-New building; `2`: 2-Retrofit; `3`: 3-Staged retrofit |
-| `phi_retrofit_type` | New building / Retrofit | T | T | 1 |  | `1`: 1-New building; `2`: 2-Retrofit; `3`: 3-Staged retrofit |
-| `num_of_units` | No. of dwelling units: | E | F | 0 |  |  |
-| `setpoint_winter` | Interior temperature winter [°F]: | J | K | 0 | F |  |
-| `setpoint_summer` | Interior temp. summer [°F]: | M | N | 0 | F |  |
-| `mechanical_cooling` | Mechanical cooling: | M | N | 0 |  |  |
+| `phi_building_category_type` (input) | Building use | R | T | 1 |  | `1`: 10-Residential building: Residential; `2`: 12-Residential building: Other; `11`: 10-Residential building: Residential; `12`: 12-Residential building: Other |
+| `phi_building_use_type` (input) | Building use | R | T | 1 |  | `10`: 10-Residential building: Residential; `12`: 12-Residential building: Other; `20`: 20-Non-res building: Office/Administration; `21`: 21-Non-res building: School half-days (< 7 h); `22`: 22-Non-res building: School full-time (≥ 7 h); `23`: 23-Non-res.: Other |
+| `phi_building_ihg_type` (input) | Building use | R | T | 4 |  | `2`: 2-Standard; `3`: 3-PHPP-calculation ('IHG' worksheet); `4`: 4-PHPP-calculation ('IHG non-res' worksheet) |
+| `phi_building_occupancy_type` (input) | No. of occupants | R | R | 2 |  | `1`: *(null)*; `2`: *(null)* |
+| `phi_certification_type` (input) | Planned energy standard | T | T | 1 |  | `10`: 10-Passive house; `21`: 21-EnerPHit (Component method); `22`: 22-EnerPHit (Energy demand method); `30`: 30-PHI Low Energy Building; `40`: 40-Other |
+| `phi_certification_class` (input) | Class | Primary energy method | T | T | 1 |  | `10`: 10-Classic | PER (renewable); `11`: 11-Classic | PE (non-renewable); `20`: 20-Plus | PER (renewable); `30`: 30-Premium | PER (renewable) |
+| `phi_pe_type` (input) | Primary energy demand criterion | T | T | 1 |  | `1`: 1-Standard; `2`: 2-Project-specific |
+| `phi_enerphit_type` (input) | New building / Retrofit | T | T | 1 |  | `1`: 1-New building; `2`: 2-Retrofit; `3`: 3-Staged retrofit |
+| `phi_retrofit_type` (input) | New building / Retrofit | T | T | 1 |  | `1`: 1-New building; `2`: 2-Retrofit; `3`: 3-Staged retrofit |
+| `num_of_units` (input) | No. of dwelling units: | E | F | 0 |  |  |
+| `setpoint_winter` (input) | Interior temperature winter [°F]: | J | K | 0 | F |  |
+| `setpoint_summer` (input) | Interior temp. summer [°F]: | M | N | 0 | F |  |
+| `mechanical_cooling` (input) | Mechanical cooling: | M | N | 0 |  |  |
 
 ---
 
@@ -202,7 +202,7 @@ Worksheet key: `AREAS`
 
 | Field Key | Label (`locator_string`) | Locator Col | Input Col | Row Offset | Unit | Options |
 |-----------|-------------------------|-------------|-----------|------------|------|---------|
-| `tfa_input` | 1-Treated floor area | M | T | 0 | M2 |  |
+| `tfa_input` (input) | 1-Treated floor area | M | T | 0 | M2 |  |
 
 ### summary_rows
 
@@ -397,12 +397,12 @@ Worksheet key: `VENTILATION`
 
 | Field Key | Label (`locator_string`) | Locator Col | Input Col | Row Offset | Unit | Options |
 |-----------|-------------------------|-------------|-----------|------------|------|---------|
-| `vent_type` | Type of ventilation | I | K |  |  |  |
-| `wind_coeff_e` | Wind protection coefficient, e | I | J |  |  |  |
-| `wind_coeff_f` | Wind protection coefficient, f | I | J |  |  |  |
-| `airtightness_n50` | Air change rate from pressurisation test | I | M |  |  |  |
-| `airtightness_Vn50` | Net air volume for pressurisation test | I | M |  | M3 |  |
-| `multi_unit_on` | 'Addl vent' worksheet | I | K |  |  |  |
+| `vent_type` (input) | Type of ventilation | I | K |  |  |  |
+| `wind_coeff_e` (input) | Wind protection coefficient, e | I | J |  |  |  |
+| `wind_coeff_f` (input) | Wind protection coefficient, f | I | J |  |  |  |
+| `airtightness_n50` (input) | Air change rate from pressurisation test | I | M |  |  |  |
+| `airtightness_Vn50` (input) | Net air volume for pressurisation test | I | M |  | M3 |  |
+| `multi_unit_on` (input) | 'Addl vent' worksheet | I | K |  |  |  |
 
 **Configuration:**
 
