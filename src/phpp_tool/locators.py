@@ -412,7 +412,15 @@ def resolve_named_range(
         ws_v = wb_vals[title]
         cell_v = ws_v[coord]
         if hasattr(cell_v, "__iter__") and not isinstance(cell_v, str):
-            return None
+            # Multi-cell destination -- PHPP defines several device-type-
+            # name ranges broader than the single value they hold (e.g.
+            # Kuehlgeraete_Kompressor_Umluft_Geraet -> K37:R37, every cell
+            # blank except K37). Resolve to the top-left cell instead of
+            # giving up entirely -- verified true for every multi-cell
+            # named_range entry in the IP field map (3 of 17), each with
+            # its real value (if any) only in the first cell.
+            cell_v = cell_v[0][0]
+        coord = cell_v.coordinate
         if skip_formulas:
             ws_f = wb_fmls[title]
             cell_f = ws_f[coord]

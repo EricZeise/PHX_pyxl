@@ -416,6 +416,14 @@ def _write_named_range(
         defn = wb_labels.defined_names[name]
         for title, coord in defn.destinations:
             from openpyxl.utils.cell import coordinate_from_string
+            if ":" in coord:
+                # Multi-cell destination -- PHPP defines several device-
+                # type-name ranges broader than the single value they hold
+                # (e.g. Kuehlgeraete_Kompressor_Umluft_Geraet -> K37:R37,
+                # every cell blank except K37). Write to the top-left cell,
+                # matching the read-side fix in locators.py's
+                # resolve_named_range.
+                coord = coord.split(":")[0]
             col_letter, row_num = coordinate_from_string(coord)
             if title.lower().endswith(" si"):
                 # Excel's own defined-name table points several German
