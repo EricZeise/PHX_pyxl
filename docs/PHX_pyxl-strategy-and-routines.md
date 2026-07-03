@@ -58,13 +58,17 @@ A markdown file per PHPP workbook type — `phpp-field-mapping/EN_10_6_IP.md` an
 
 ### Resolved limitation: openpyxl save degradation (fixed 2026-07-01)
 
-openpyxl's load→save cycle strips some Excel extensions: data validation rules, custom headers/footers, and certain XML namespace extensions that PHPP relies on. This no longer affects written output, because the writer never calls openpyxl's `save()` — `surgical_writer.py` persists writes via a ZIP/XML patch instead (see above). Verified byte-for-byte: `<extLst>` and `<headerFooter>` regions are identical between template and written output across all 83 sheets of a full 13,102-cell roundtrip write.
+openpyxl's load→save cycle strips some Excel extensions: data validation rules, custom headers/footers, and certain XML namespace extensions that PHPP relies on. This no longer affects written output, because the writer never calls openpyxl's `save()` — `surgical_writer.py` persists writes via a ZIP/XML patch instead (see above). Verified byte-for-byte: `<extLst>` and `<headerFooter>` regions are identical between template and written output across all 83 sheets of a full roundtrip write.
 
 The remaining caveat is unrelated to this fix: written files still cannot be reopened by Excel via AppleScript automation on macOS 26 (data validation errors cause a hang) — that's a macOS/Excel-version compatibility issue, not something either openpyxl or the surgical patch controls.
 
+### Formula-cell write protection (added 2026-07-03)
+
+The surgical writer refuses to overwrite any target cell that already holds a formula in the template, regardless of what the field map or a locator resolver thinks that cell should contain — logging a warning and reporting the skipped write back up the call chain so `writer.py` can drop it from its own returned write list. This is defense-in-depth, not a workaround for a known-bad field map entry: the field map should never legitimately target a formula cell, so a skip here always signals an upstream locator bug. It was added after a real incident where an entry-block scanner (`resolve_block()`, see Part 5) over-read past its intended range and clobbered a shared formula spanning multiple cells, corrupting the written workbook badly enough that Excel needed to "repair" it on open. The root cause was fixed too, but this safety net stays regardless — it protects against this entire bug class in both projects, unconditionally, for any future locator mistake.
+
 ### Verification
 
-The roundtrip test confirms data fidelity end to end. The writer returns its full list of `(sheet_name, col, row, value)` writes. The test script opens the written file with openpyxl and verifies every cell matches — 13,102 cells, zero mismatches. An optional second part uses xlwings+Excel to validate that openpyxl's cached formula values match Excel's live recalculation.
+The roundtrip test confirms data fidelity end to end. The writer returns its full list of `(sheet_name, col, row, value)` writes. The test script opens the written file with openpyxl and verifies every cell matches. As of 2026-07-03: `EN_10_6_IP` (`Example_IP.xlsx`→`Empty_IP.xlsx`) writes 2,610 cells, `EN_10_6_SI` (`Example_SI.xlsx`→`Empty_SI.xlsx`) writes 14,125 cells — both zero mismatches. An optional second part uses xlwings+Excel to validate that openpyxl's cached formula values match Excel's live recalculation. A third, separate stage (`verify_excel.py`) goes further, comparing formula *results* too, after both files have been manually opened and saved in Excel — see Part 4.
 
 ---
 
@@ -172,7 +176,7 @@ Example:
 python scripts/verify_excel.py Data/Example_IP.xlsx records/roundtrip_<timestamp>/Example_written.xlsx
 ```
 
-Both files must already have been opened in Excel and saved manually — this refreshes cached formula values so openpyxl can read correct results without live Excel access. Output lands in `records/verify_excel_<timestamp>/`, including a machine-readable `verify_excel_summary.json`.
+Both files must already have been opened in Excel and saved manually — this refreshes cached formula values so openpyxl can read correct results without live Excel access. Output lands in `records/verify_excel_<timestamp>/`, including a machine-readable `verify_excel_summary.json` (counts only) and, as of 2026-07-03, a full `verify_excel_details.txt` (every mismatch, untruncated — the terminal output caps the printed list at 30).
 
 The full three-stage sequence in practice:
 
@@ -189,7 +193,7 @@ python scripts/verify_excel.py Data/Example_IP.xlsx records/roundtrip_<timestamp
 ### Running the test suite
 
 ```bash
-pytest tests/ -v          # 88 tests, ~0.14s, no Excel needed
+pytest tests/ -v          # 96 tests, ~0.15s, no Excel needed
 ```
 
 ### Quick reference
@@ -229,6 +233,9 @@ pytest tests/ -v          # 88 tests, ~0.14s, no Excel needed
 | `norm()` | Normalizes label text for comparison — NFKC unicode, NBSP→space, strip, casefold. Ensures labels match regardless of Excel's formatting quirks. |
 | `col_to_idx()` | Converts column letters (`A`→1, `AA`→27) to 1-based numeric index for openpyxl cell access. |
 | `field_col()` | Extracts the column letter from a field spec (handles both string and dict forms). |
+| `field_row_offset()` (added 2026-07-03) | Extracts a row offset from a field spec: `row_offset` key, else `row` key, else `0`. Shared by every code path that reads a row-offset field, on both the reader and writer sides — previously this exact expression was duplicated four times across `reader.py`/`writer.py`. |
+| `resolve_entry_row_start()` (added 2026-07-03) | Looks up a block's entry-start row from any of its three recognized key aliases (`entry_row_start`, `entry_start_row`, `start_row`). Shared by `reader.py`'s and `writer.py`'s section dispatch, which each used to repeat the same three-alias lookup independently. |
+| `base_sheet_for_si_mirror()` (added 2026-07-03) | Given a sheet name and the workbook's sheet list, returns the base-tab name if the given name ends in `" SI"` and a matching base sheet exists, else `None`. Shared by `resolve_named_range()`'s SI-mirror fallback (below) and `writer.py`'s `_write_named_range()`, which need to answer the identical question — "what's the base tab for this SI sheet?" — from opposite directions (read vs. write). |
 | `_is_formula()` | Checks the `data_only=False` worksheet to determine whether a cell contains a formula (value starts with `=`). This is the core of formula detection. |
 | `cell_value()` | Reads a single cell from the `data_only=True` worksheet. When `skip_formulas=True`, first checks `_is_formula()` against the `data_only=False` worksheet and returns `None` for formula cells. |
 | `find_row_in_col()` | Searches for a text needle in a column using the `data_only=True` worksheet for label text matching. Iterates row by row from `start_from` to `max_row`. Supports substring and exact matching via `norm()`. |
@@ -248,17 +255,24 @@ The most complex resolver. Handles repeating data rows (e.g. window schedules, a
 |------|-------------|
 | 1 | Find the header row and entry row using `find_row_in_col()` on `ws_vals`. If the entry row is itself a column header (detected by `is_entry_row_header()`), start one row below. |
 | 2 | Build a column index map from all `column_fields` for cell access. |
-| 3 | Iterate from start row to `max_row`. For each row: read each column field from `ws_vals`, check `_is_formula()` against `ws_fmls` if `skip_formulas` is on. |
+| 3 | Iterate from start row to `max_row`. For each row: check for a bold entry-column cell (see below) and stop if found; otherwise read each column field from `ws_vals`, check `_is_formula()` against `ws_fmls` if `skip_formulas` is on. |
 | 4 | Check for end markers (e.g. "Unhide additional rows"), detect sparse/empty rows (break after 3 consecutive), skip header rows, and collect data rows. |
 | 5 | Return a list of row dicts, each with `_row` metadata for round-trip positioning. |
+
+**Bold-row hard stop (added 2026-07-03):** if a row's entry-column cell is bold, the scan stops immediately, regardless of what that row's *values* look like. This catches section titles (totals rows, or an unrelated table below that happens to reuse the same column layout) that the content-based heuristics above can't reliably distinguish from real data — a real incident found `resolve_block()` reading straight through a bold "Total net floor area" row and into a completely different device table below it, ultimately corrupting a shared formula on write (see Part 5, and the formula-cell write protection note earlier in this document). Verified safe by resolving every header+entry block in both field-map versions before adding this check: the only bold entry-column row any block currently returned was exactly that bug, so the check can only narrow results, never break a currently-correct block.
 
 #### Strategy 3: Named range — `resolve_named_range()`
 
 Looks up an Excel defined name via `wb_vals.defined_names[name]`, iterates its `destinations` to get `(title, coord)`, reads the cell value from `wb_vals[title][coord]`. If `skip_formulas` is on, also checks `wb_fmls[title][coord]` for formula strings. Returns `None` on missing names.
 
+Two refinements added 2026-07-03, both found via `verify_excel.py`'s full-fidelity comparison:
+
+- **Multi-cell destinations.** Some defined names (e.g. the `Kuehlgeraete_Kompressor_*_Geraet` device-type-name ranges) resolve to a range spanning several cells, not one — PHPP defines the name broader than the value it actually holds, with the real value (if any) only in the top-left cell and every other cell blank. `resolve_named_range()` now narrows to that top-left cell before proceeding, instead of giving up and returning `None` for the whole destination.
+- **SI-mirror passthrough fallback.** Several German-named defined ranges (`Klima_Region`, `Klima_Standort`, etc.) resolve, via Excel's own internal name table — not anything the field map's `sheet_name` controls — to a formula cell on a `"<Name> SI"` mirror tab that just passes through the real designer input on the base tab. When `skip_formulas` detects that formula, `resolve_named_range()` now falls back (via `base_sheet_for_si_mirror()`, above) to the same coordinate on the base tab, rather than returning `None` for what is, in reality, a real input value. This is the same root cause as the `<Name> SI` mirror-tab issue described later in this document, but reachable through defined names in a way the field map's own `sheet_name` selection can't route around.
+
 #### Strategy 4: Absolute address — `resolve_absolute()`
 
-Reads `ws_vals[address].value` for a fixed cell reference like `"C11"`. If `skip_formulas` is on, checks `ws_fmls[address].value` for formula strings.
+Parses the address into `(col, row)` via `parse_cell_ref()` and delegates to `cell_value()` — as of 2026-07-03, no longer duplicates `cell_value()`'s own formula-check-then-read logic via a separate `ws_vals[address]`/`ws_fmls[address]` code path.
 
 #### Strategy 5: Column + row-offset — `resolve_row_offset()`
 
@@ -278,7 +292,7 @@ Reads a cell at a fixed `(row, col)`. Delegates to `cell_value()` with `skip_for
 |------|-------------|
 | 1 | Load the workbook twice: `load_workbook(path, data_only=True)` → `wb_vals`, `load_workbook(path, data_only=False)` → `wb_fmls`. Both loads use default mode (not `read_only`, which causes hangs on large workbooks). |
 | 2 | Parse the field map via `parse_field_map()`. |
-| 3 | For each worksheet in the field map, find the matching sheet (preferring SI variants via `prefer_si_sheet()`). Pair the two worksheet objects into a `WsPair`. Call `_read_worksheet()`. |
+| 3 | For each worksheet in the field map, resolve `sheet_name` case-insensitively against the real workbook (`resolve_sheet_name()`) — no runtime SI/base guessing; each versioned field map declares the correct sheet directly. Pair the two worksheet objects into a `WsPair`. Call `_read_worksheet()`. |
 | 4 | Close both workbooks. |
 | 5 | Return the nested dict. |
 
@@ -313,7 +327,7 @@ Iterates the `fields` dict. For each field with a `locator_string`, calls `resol
 
 #### `_read_config()`
 
-Iterates config key/value pairs. Classifies each via `classify_item()`: absolute addresses call `resolve_absolute()` (Strategy 4) with the `WsPair`, named ranges call `resolve_named_range()` (Strategy 3) with both `wb_vals` and `wb_fmls`, plain values pass through.
+Iterates config key/value pairs. Each key's kind (`literal`/`address`/`named_range`) comes from the field map's own explicit type tag (parsed by `map_parser.py` into `config_kind`, not inferred from the value's shape): `address` calls `resolve_absolute()` (Strategy 4) with the `WsPair`, `named_range` calls `resolve_named_range()` (Strategy 3) with both `wb_vals` and `wb_fmls`, `literal` values pass through unchanged.
 
 #### `_read_block_section()`
 
@@ -333,7 +347,7 @@ Iterates rows starting from `entry_row_start`, reading each `column_field` via `
 
 #### `_read_items_section()`
 
-Iterates an `items` dict. For dict items with `col`+`row`, calls `resolve_fixed()` (Strategy 6) with the `WsPair`. For string items, classifies as absolute address → `resolve_absolute()` (Strategy 4) or named range → `resolve_named_range()` (Strategy 3) with both workbook objects.
+Iterates an `items` dict. For dict items with `col`+`row`, calls `resolve_fixed()` (Strategy 6) with the `WsPair`. For string items, looks up the field map's own declared kind for that key (`items_kind`, from the required `(address)`/`(named_range)`/`(literal)` tag) and dispatches accordingly: `address` → `resolve_absolute()` (Strategy 4), `named_range` → `resolve_named_range()` (Strategy 3) with both workbook objects, `literal` passes through.
 
 #### `_read_appliance_section()` (stub)
 
@@ -355,7 +369,8 @@ Finds the header row position via `find_row_in_col()` on `ws_vals` and returns `
 | 2 | Parse the field map. For each worksheet key in the record, find the matching sheet and call `_write_worksheet()`, threading the plain sheet-name string through (no writable openpyxl object is needed) and collecting writes into a `pending` list. |
 | 3 | Close `wb_labels`. |
 | 4 | Call `surgical_writer.apply_surgical_writes(template_path, output_path, pending)` — this copies the template and patches only the `<sheetData>` of sheets with writes, as a ZIP/XML edit. See `surgical_writer.py` below. |
-| 5 | Return the list of `(sheet_name, col, row, value)` writes for verification. |
+| 5 | (Added 2026-07-03) The call above returns the set of writes it *refused* — any target cell that already held a formula in the template (see the formula-cell write protection note in Part 1). `write_phpp()` logs a summary warning if any were skipped and filters them out of its own returned write list, so verification callers never expect a value that was deliberately not written. |
+| 6 | Return the (possibly filtered) list of `(sheet_name, col, row, value)` writes for verification. |
 
 #### `_write_cell()`
 
@@ -367,18 +382,25 @@ Mirrors `_read_worksheet()`: writes label-anchored fields first, then iterates s
 
 #### `_write_section()` — dispatch
 
-Same pattern detection as the reader's `_read_section()`, routing to:
+Same pattern detection as the reader's `_read_section()` (using the shared `resolve_entry_row_start()` helper for the `entry_row_start`/`entry_start_row`/`start_row` alias lookup), routing to:
 
 - `_write_block()` — iterates row data, uses `_row` metadata or sequential offset to determine target rows, writes each column field.
-- `_write_row_offset()` — finds the anchor row via `find_row_in_col()` on `ws_labels`, writes each field at its row offset.
+- `_write_row_offset()` — finds the anchor row via `find_row_in_col()` on `ws_labels`, writes each field at its row offset (via the shared `field_row_offset()` helper).
 - `_write_column_row()` — iterates the column x row grid, writes each intersection.
 - `_write_static_column()` — iterates row data, writes each column field at the row's position.
 - `_write_items()` — writes fixed-address, absolute-address, and named-range items.
 - `_write_label_anchored()` — finds each label via `find_row_in_col()` on `ws_labels`, writes the value at the paired column.
 
+**Known gap (not fixed, documented 2026-07-03):** unlike `_read_section()`, there is no dispatch branch here for the `appliance_rows` strategy at all — the reader's classification logic and the writer's have drifted into two independently-maintained copies, and this is exactly where they disagree. Any section using that strategy (currently the Electricity sheet's `input_rows` — dishwasher, clothes washer/dryer, refrigerator, freezer) silently writes nothing. See Part 5 and `phpp-concerns-and-examples.md` #31.
+
 #### `_write_named_range()`
 
 Resolves the named range via `wb_labels.defined_names[name]`, uses `coordinate_from_string()` to extract `(col_letter, row_num)`, and appends to the pending list. Rejects `None`, dict, and list values.
+
+Two refinements added 2026-07-03, mirroring the read-side fixes in `resolve_named_range()` (Part 3, `locators.py`) — both needed on the write side too, since without them the write would target the wrong cell and get silently refused by `surgical_writer.py`'s formula-cell protection rather than landing anywhere useful:
+
+- **Multi-cell destinations:** if the resolved coordinate is a range (e.g. `"K37:R37"`), splits to just the first cell before calling `coordinate_from_string()` (which can't parse a range string).
+- **SI-mirror redirect:** if the destination sheet is an `"<Name> SI"` mirror tab, redirects to the base tab's same coordinate via `base_sheet_for_si_mirror()`, since the SI-mirror cell is a passthrough formula, not the real input cell.
 
 ### `surgical_writer.py` — ZIP/XML persistence (ported from PHX_Dev)
 
@@ -386,11 +408,11 @@ Resolves the named range via `wb_labels.defined_names[name]`, uses `coordinate_f
 
 | Function | What it does |
 |----------|-------------|
-| `apply_surgical_writes()` | Public entry point. Groups the flat write list by sheet name, then calls `_apply_surgical()`. |
-| `_apply_surgical()` | Copies the template if there are no writes. Otherwise builds a sheet-name → ZIP-path map, patches each affected sheet's XML, and rebuilds the ZIP. |
+| `apply_surgical_writes()` | Public entry point. Groups the flat write list by sheet name, calls `_apply_surgical()`, and (added 2026-07-03) returns the set of `(sheet_name, col, row)` writes that were refused — see `_patch_sheet_xml()` below. |
+| `_apply_surgical()` | Copies the template if there are no writes. Otherwise builds a sheet-name → ZIP-path map, patches each affected sheet's XML, rebuilds the ZIP, and aggregates each sheet's skipped-write set into one returned set. |
 | `_build_sheet_map()` | Reads `xl/workbook.xml` for sheet names/rIds and `xl/_rels/workbook.xml.rels` for rId → file target, returning `{sheet_name: zip_path}`. |
-| `_patch_sheet_xml()` | The core trick: finds the `<sheetData>...</sheetData>` substring by raw text search, parses the *whole* document with `lxml` only to build/modify `<row>`/`<c>` elements, then re-serializes *only* the `<sheetData>` element and splices it back into the original text at the same byte offsets. Everything before and after `<sheetData>` — including `<extLst>` and `<headerFooter>` — is never touched, re-parsed, or re-serialized. Restores `\r\n` line endings inside cached values after serialization, since lxml normalizes them to `\n` per the XML spec but Excel expects `\r\n` back. |
-| `_set_cell_value()` | Chooses the correct XML encoding for a value: `<v>` for numbers, `<v t="b">` for booleans, `<is><t>` (inline string) for strings — and removes any existing `<f>` (formula) element, since a write always replaces a formula with a literal value. |
+| `_patch_sheet_xml()` | The core trick: finds the `<sheetData>...</sheetData>` substring by raw text search, parses the *whole* document with `lxml` only to build/modify `<row>`/`<c>` elements, then re-serializes *only* the `<sheetData>` element and splices it back into the original text at the same byte offsets. Everything before and after `<sheetData>` — including `<extLst>` and `<headerFooter>` — is never touched, re-parsed, or re-serialized. Restores `\r\n` line endings inside cached values after serialization, since lxml normalizes them to `\n` per the XML spec but Excel expects `\r\n` back. **Added 2026-07-03:** before applying each cell write, checks whether the target cell already holds a formula (`<f>` element) in the template. If so, the write is skipped entirely (logged as a warning, added to the returned skipped set) rather than applied — this is what prevents a locator bug from ever corrupting a shared formula again, regardless of which strategy produced the bad write. |
+| `_set_cell_value()` | Chooses the correct XML encoding for a value: `<v>` for numbers, `<v t="b">` for booleans, `<is><t>` (inline string) for strings — and removes any existing `<f>` (formula) element, since a write always replaces a formula with a literal value. Only reached for cells that passed the formula-cell check above. |
 | `_sort_rows_and_cells()` | Excel requires strictly ascending row/cell order; re-sorts `<row>` elements by row number and `<c>` elements within each row after inserting new ones. |
 | `_rebuild_zip()` | Streams the original ZIP into a new one, substituting only the modified sheet XML entries — every other archive member (styles, drawings, charts, VBA, custom XML) passes through as raw bytes, unmodified. |
 
@@ -412,9 +434,11 @@ Resolves the named range via `wb_labels.defined_names[name]`, uses `coordinate_f
 
 | Command | Pipeline |
 |---------|----------|
-| `phpp-tool read <filled.xlsx> -o record.json` | `read_phpp()` → `BuildingRecord.from_reader_dict()` → `to_json()` → write file |
-| `phpp-tool write <record.json> <template.xlsx> -o output.xlsx` | `model_validate_json()` → `model_dump()` → `write_phpp()` |
+| `phpp-tool read <filled.xlsx> -o record.json` | `read_phpp()` → `BuildingRecord.from_reader_dict()` → `model_dump(mode="json", exclude_none=True)` → stamp `_phpp_version` → write file |
+| `phpp-tool write <record.json> <template.xlsx> -o output.xlsx` | `model_validate_json()` → `model_dump(exclude_none=True)` → `write_phpp()` |
 | `phpp-tool inspect-map` | `parse_field_map()` → print worksheet/field/section counts |
+
+**Note (2026-07-03):** `read`'s pipeline used to go through `to_json()` (a JSON *string*), `json.loads()` it back into a dict just to inject the `_phpp_version` key, then `json.dumps()` it again — a pointless serialize→parse→re-serialize round trip. It now builds the dict directly via `model_dump(mode="json", ...)`, which is what `to_json()` itself calls internally anyway (`to_json()` remains available as a public method, still exercised by `models.py`'s own tests, just no longer used by this one call site).
 
 ### `scripts/roundtrip.py` — Two-part roundtrip verification
 
@@ -426,7 +450,7 @@ Resolves the named range via `wb_labels.defined_names[name]`, uses `coordinate_f
 |-------|-------------|
 | 1 — Read inputs | `read_phpp(skip_formulas=True)` captures only input cells via the dual-load approach. Reports count of non-None values. |
 | 2 — Read all | `read_phpp(skip_formulas=False)` captures everything. Compares against Phase 1 to report how many formula values were filtered (typically ~35%). |
-| 3 — Write | `write_phpp()` writes inputs into the template using the dual-load writer. Returns the list of 13,102 cell writes. |
+| 3 — Write | `write_phpp()` writes inputs into the template using the dual-load writer. Returns the write list — 2,610 cells for the IP variant (`Example_IP.xlsx`→`Empty_IP.xlsx`), 14,125 for the SI variant (`Example_SI.xlsx`→`Empty_SI.xlsx`). |
 | 4 — Verify | Opens the written file with openpyxl (`data_only=False`) and checks every `(sheet, col, row, value)` tuple from the writer. Reports checked count, mismatches, and details. Both Example→Empty and Empty→Empty produce zero mismatches. |
 
 #### Part 2 — Excel cache validation (optional, requires xlwings+Excel)
@@ -515,7 +539,7 @@ This is not a unit test of individual functions — those are covered by the 88 
 
 #### Why cell-by-cell verification matters
 
-The tool touches 13,102 cells across 31 worksheets. A mismatch in any one of them could mean a wrong U-value, a missing ventilation rate, or a misplaced area entry. Aggregate statistics (like "99.9% match") would hide single-cell errors that could be significant in a Passive House certification. The test therefore checks every cell individually and reports exact addresses for any mismatch.
+The tool touches thousands of cells per workbook — 2,610 for the IP variant, 14,125 for the SI variant (the SI-native file has far more genuinely mapped input cells; see the formula-filter discussion below for why). A mismatch in any one of them could mean a wrong U-value, a missing ventilation rate, or a misplaced area entry. Aggregate statistics (like "99.9% match") would hide single-cell errors that could be significant in a Passive House certification. The test therefore checks every cell individually and reports exact addresses for any mismatch.
 
 #### Why two reads (inputs vs all)
 
@@ -524,7 +548,7 @@ The roundtrip reads the source workbook twice:
 1. **Inputs only** (`skip_formulas=True`) — this is what gets written to JSON and into the template. It captures only designer-entered values.
 2. **All cells** (`skip_formulas=False`) — this captures everything including formula results. Comparing the two reveals the formula filter's effect.
 
-This dual read serves two purposes. First, it quantifies the formula filter: for the Example workbook, 7,625 of 22,044 non-None values (34.6%) are formula results that would overwrite formulas if written back. Second, it documents which worksheet fields are formulas versus inputs — the Verification sheet, for example, is entirely formula-driven:
+This dual read serves two purposes. First, it quantifies the formula filter: for `Example_IP.xlsx`, 15,776 of 19,934 non-None values (79.1%) are formula results that would overwrite formulas if written back — the IP-shell workbook's dual-tab structure (every worksheet plus an `<Name> SI` mirror) means most cells on the SI-suffixed tabs are unit-conversion or passthrough formulas, not real inputs. For `Example_SI.xlsx` (genuinely SI-native, single-shell, no mirror tabs at all) the ratio is much lower — 2,272 of 17,870 (12.7%) — since there's no second, formula-heavy tab layer to filter out. Second, the dual read documents which worksheet fields are formulas versus inputs — the Verification sheet, for example, is entirely formula-driven:
 
 | Field | All cells | Inputs only |
 |-------|-----------|-------------|
@@ -566,7 +590,7 @@ python scripts/verify_excel.py Data/Example_IP.xlsx records/.../Example_written.
 | Example → Empty | A filled PHPP with real building data | A blank PHPP template | Input values from a real project survive the cycle |
 | Empty → Empty | A blank PHPP template | The same blank template | Default/structural values survive; no spurious data is introduced |
 
-Both produce zero mismatches across 13,102 verified cells.
+Both produce zero mismatches — 2,610 verified cells for the IP variant, 14,125 for the SI variant.
 
 ### Output files
 
@@ -613,7 +637,7 @@ Produced by `phpp-tool read`. Structure:
       ...
     }
   },
-  ...                                   <- 17 worksheet keys total
+  ...                                   <- 21 worksheet keys for Example_IP.xlsx (22 for Example_SI.xlsx); 31 possible, not every worksheet resolves data for every building
 }
 ```
 
@@ -634,8 +658,8 @@ Produced by `phpp-tool write`. This is a copy of the blank template with input v
 
 | File | Contents |
 |------|----------|
-| `<name>_inputs.json` | The input-only read (`skip_formulas=True`). This is the data that travels through the pipeline — the same output `phpp-tool read` would produce. 14,419 non-None values for the Example workbook. |
-| `<name>_all.json` | The full read (`skip_formulas=False`). Includes formula results alongside inputs. 22,044 non-None values for the Example workbook. Comparing against `_inputs.json` shows exactly which cells are formulas. |
+| `<name>_inputs.json` | The input-only read (`skip_formulas=True`). This is the data that travels through the pipeline — the same output `phpp-tool read` would produce. 4,158 non-None values for `Example_IP.xlsx` (15,598 for `Example_SI.xlsx`). |
+| `<name>_all.json` | The full read (`skip_formulas=False`). Includes formula results alongside inputs. 19,934 non-None values for `Example_IP.xlsx` (17,870 for `Example_SI.xlsx`). Comparing against `_inputs.json` shows exactly which cells are formulas. |
 | `<name>_written.xlsx` | The written workbook. Template with input values injected. This is what `phpp-tool write` would produce. The roundtrip test verifies every cell in this file against the writer's reported write list. |
 | `<name>_orig_excel.json` | (Part 2 only) Excel live-recalculated values from the original source. Comparing against `_all.json` validates openpyxl's cached formula values. |
 
@@ -700,6 +724,15 @@ Lessons from building both PHX_pyxl and its sibling PHX_xlwg against the same fi
 - ~~**`Climate.ud_block`'s `summer_delta_t_unit` had a bogus `DELTA-C` "column" value**~~ — **Fixed 2026-07-01.** Every sibling row in that column-fields table maps to a real 1-3 letter column; this one had the literal string `DELTA-C` — a stray unit annotation in the wrong table cell. Harmless on PHX_pyxl (`col_to_idx("DELTA-C")` silently produces a nonsensical but non-crashing index) but crashed PHX_xlwg's live AppleScript call outright when discovered during the Stage D port. Removed from all four field map copies (`EN_10_6_SI.md`/`EN_10_6_IP.md` × PHX_pyxl/PHX_xlwg) — it never represented a real column mapping and nothing consumed the key.
 - **Field map is now versioned.** `phpp-field-mapping/EN_10_6_IP.md` and `EN_10_6_SI.md` replace the single `phpp-field-mapping.md`, selected via `--phpp-version` (default `EN_10_6_IP`). Adopted from the architectural pattern in `PH-Tools/PHX`'s `phpp_localization/` directory (one shape file per language/version/unit-variant) — though nothing was copied from that GPL-3.0 project; both files here are independently authored and verified against this project's own `Example_IP.xlsx`/`Example_SI.xlsx`.
 
+**Fourth pass (2026-07-03) — a shared-formula corruption incident, two more named-range gaps, a code-quality pass, and one retraction (see `phpp-concerns-and-examples.md` #19-23, #27-31 for full evidence):**
+
+- ~~**`resolve_block()`'s entry-block scanner read past its true end, corrupting a shared formula badly enough that Excel needed to "repair" a written file on open**~~ — **Fixed 2026-07-03.** `ELEC_NON_RES.lighting_rows`' sparse-row heuristic never terminated on its own — the block's padded tail rows all carry a non-null string default, so the "has a string value" check never goes sparse — and read straight through a bold totals row into a completely unrelated device table below, producing 4 bogus entries that, when written back, deleted a shared formula's definition and orphaned every cell depending on it. Two-part fix: `resolve_block()` now stops the moment it hits a row whose entry-column cell is bold (see the Strategy 2 note in Part 3); independently, `surgical_writer.py` now refuses to write into any cell that already holds a formula, unconditionally (see the formula-cell write protection note in Part 1). Verified safe against every header+entry block in both field-map versions before adding the bold-row check — it can only narrow results, never break a currently-correct block.
+- ~~**Named-range fields silently dropped via an SI-mirror formula, and again via multi-cell destinations**~~ — **Fixed 2026-07-03.** Two distinct gaps in `resolve_named_range()`, both found via `verify_excel.py`'s full-fidelity comparison: (1) several German-named defined ranges resolve, via Excel's own internal name table, to a formula cell on a `"<Name> SI"` mirror tab — the same root disease as the `<Name> SI` mirror-tab issue above, but reachable through a path the field map's own `sheet_name` can't route around, since Excel (not the field map) decides which sheet a defined name points to; (2) some defined names span multiple cells, with the real value (if any) only in the top-left cell, and the resolver used to give up entirely rather than narrow to it. Both fixed on read and write sides — see the Strategy 3 and `_write_named_range()` notes in Part 3.
+- **`OVERVIEW.basic_data.address_project_name` maps to the wrong cell — a field-map data error, exact fix documented but not yet applied.** Traced through a 3-hop formula chain to the real literal at `Verification!K5`. Unlike the other field-map data corrections in this document's history, this one requires *moving* the field-map entry to a different worksheet section (no cross-sheet address syntax exists), which changes the JSON output path from `OVERVIEW.basic_data.address_project_name` to `VERIFICATION._config.address_project_name` — verified to need zero code changes, since worksheet-level `_config` values already round-trip through the existing Pydantic models. See `field-map-corrections-4-6-7-9-11.md` #28.
+- **NOT A BUG: `Empty_IP.xlsx`'s own internal PHPP reference/lookup tables are measurably incomplete relative to `Example_IP.xlsx`.** Explains the remaining formula-result mismatches `verify_excel.py` reports for `lighting_rows` and `COOLING_UNITS.recirculation_air.SEER` — traced the full dependency chain and confirmed the gap exists in the untouched blank template before any of this tool's code runs (24 fewer populated cells in one reference sheet, 164 fewer in another). This tool correctly never writes to these areas by design. No code, field-map, or writer change can close this gap — it would need a more complete/matching blank template.
+- **Code-quality pass (not bug-driven).** Removed a dead Pydantic model; extracted three small helpers (`base_sheet_for_si_mirror()`, `field_row_offset()`, `resolve_entry_row_start()` — see Part 3) that had been duplicated verbatim in 2-4 places each; `resolve_absolute()` now delegates to `cell_value()`/`parse_cell_ref()` instead of a parallel implementation; fixed a pointless serialize→parse→re-serialize round trip in `cli.py`'s `read` command. Found but deliberately left alone: `reader.py`'s and `writer.py`'s section-dispatch classification logic is two independently-evolving copies rather than one shared classifier — exactly why the `appliance_rows` write path is missing entirely (see the `_write_section()` note in Part 3); and the `appliance_rows` strategy itself (Electricity sheet's `input_rows` — dishwasher, clothes washer/dryer, refrigerator, freezer) is a non-functional stub on read and has zero write support, in both projects — real designer data confirmed present and silently discarded. Both are documented as open items, not regressions from this pass, and need a feature-design decision rather than a quick patch.
+- **Retraction:** concern #15 above (`entry_row_start` cross-check) previously characterized the `DHW.tanks` section's 191-vs-189 disagreement as real, unresolved field-map drift. That was wrong. Direct inspection shows row 189 is only the entry-locator's label text, and row 191 — 2 rows below, past a blank row — is where the section's real first data field lives, in both the filled and blank test workbooks. `entry_row_start: 191` is correct; the cross-check's warning is a harmless false positive for this section's specific label-to-data gap, not a sign of drift. See `field-map-corrections-4-6-7-9-11.md` for the full evidence trail.
+
 ### openpyxl
 
 **Features**
@@ -712,7 +745,7 @@ Lessons from building both PHX_pyxl and its sibling PHX_xlwg against the same fi
 **Concerns / Limitations**
 
 - **Cached, not live, formula values** — reads reflect whatever Excel last saved, not necessarily current data. Confirming freshness requires the optional xlwings+Excel comparison in roundtrip Part 2.
-- ~~**Save cycle drops content via two distinct mechanisms**~~ — **Fixed 2026-07-01.** This concern applied to *openpyxl's own save cycle*: (1) `parse_extensions()` unconditionally discards any of 8 GUID-tagged `<extLst>` extension types it recognizes — Conditional Formatting, Data Validation, Sparkline Group, Slicer List, Protected Range, Ignored Error, Web Extension, Timeline Ref (`openpyxl/xml/constants.py:EXT_TYPES`) — of which only **Data Validation** was confirmed to actually fire on `Example.xlsx`/`Empty.xlsx`. (2) `header_footer.py`'s `_split_string()` regex fails to match PHPP's header/footer format codes and silently blanks all three sections. The writer no longer calls openpyxl's `save()` at all — `surgical_writer.py` persists writes via a ZIP/XML patch instead, touching only the `<sheetData>` region of affected sheets. Verified byte-for-byte: `<extLst>` and `<headerFooter>` regions are identical between template and written output across all 83 sheets of a full 13,102-cell roundtrip write. The only remaining caveat is unrelated: written files still can't be reopened by Excel via AppleScript automation on macOS 26 (a separate OS/Excel-version compatibility issue, not something the writer controls).
+- ~~**Save cycle drops content via two distinct mechanisms**~~ — **Fixed 2026-07-01.** This concern applied to *openpyxl's own save cycle*: (1) `parse_extensions()` unconditionally discards any of 8 GUID-tagged `<extLst>` extension types it recognizes — Conditional Formatting, Data Validation, Sparkline Group, Slicer List, Protected Range, Ignored Error, Web Extension, Timeline Ref (`openpyxl/xml/constants.py:EXT_TYPES`) — of which only **Data Validation** was confirmed to actually fire on `Example.xlsx`/`Empty.xlsx`. (2) `header_footer.py`'s `_split_string()` regex fails to match PHPP's header/footer format codes and silently blanks all three sections. The writer no longer calls openpyxl's `save()` at all — `surgical_writer.py` persists writes via a ZIP/XML patch instead, touching only the `<sheetData>` region of affected sheets. Verified byte-for-byte: `<extLst>` and `<headerFooter>` regions are identical between template and written output across all 83 sheets of a full roundtrip write. The only remaining caveat is unrelated: written files still can't be reopened by Excel via AppleScript automation on macOS 26 (a separate OS/Excel-version compatibility issue, not something the writer controls).
 - **Written files can't be reopened via AppleScript automation** — data validation errors cause a hang, so written files can only be reopened manually in the Excel GUI.
 - **No recalculation** — full-fidelity verification of formula results (`verify_excel.py`) requires a manual step (open both files in Excel, save) that pure openpyxl cannot automate away.
 
