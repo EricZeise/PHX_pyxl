@@ -80,7 +80,15 @@ def write_phpp(
     finally:
         wb_labels.close()
 
-    apply_surgical_writes(template_path, output_path, pending)
+    skipped = apply_surgical_writes(template_path, output_path, pending)
+    if skipped:
+        logger.warning(
+            "Skipped %d write(s) that targeted a cell already holding a "
+            "formula in the template (see surgical_writer warnings above "
+            "for exact cells) -- likely a block locator over-reading its "
+            "intended range", len(skipped),
+        )
+        pending = [w for w in pending if (w[0], w[1], w[2]) not in skipped]
 
     logger.info("Wrote %d cell values", total_writes)
     return pending

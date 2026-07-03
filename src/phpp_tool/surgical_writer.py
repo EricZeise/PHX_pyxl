@@ -10,6 +10,7 @@ of the file -- including <extLst> and <headerFooter> -- untouched.
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 import zipfile
@@ -19,8 +20,11 @@ from typing import Any
 
 from lxml import etree
 
+logger = logging.getLogger(__name__)
+
 CellWrite = tuple[str, int, Any]  # (col_letter, row_num, value)
 SheetWrites = dict[str, list[CellWrite]]  # sheet_name -> list of writes
+SkippedRef = tuple[str, str, int]  # (sheet_name, col_letter, row_num)
 
 SHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -30,12 +34,21 @@ def apply_surgical_writes(
     template_path: str | Path,
     output_path: str | Path,
     writes: list[tuple[str, str, int, Any]],
-) -> None:
+) -> set[SkippedRef]:
     """Apply (sheet_name, col, row, value) writes via surgical XML patch.
 
     Copies the template byte-for-byte, then edits only the <sheetData>
     of sheets that have writes -- everything else (extLst, headerFooter,
     drawings, charts, VBA) passes through untouched.
+
+    Returns the set of (sheet_name, col, row) writes that were skipped
+    because the target cell already held a formula in the template --
+    overwriting it would silently delete that formula (and, if it was a
+    shared-formula master, orphan every dependent cell in its range,
+    which is what makes Excel flag the file for repair on open). Callers
+    should drop these refs from their own returned write list so
+    verification doesn't expect a value that was deliberately not
+    written.
     """
     template_path = Path(template_path)
     output_path = Path(output_path)
@@ -44,30 +57,34 @@ def apply_surgical_writes(
     for sheet_name, col, row, value in writes:
         by_sheet.setdefault(sheet_name, []).append((col, row, value))
 
-    _apply_surgical(template_path, output_path, by_sheet)
+    return _apply_surgical(template_path, output_path, by_sheet)
 
 
 def _apply_surgical(
     template_path: Path, output_path: Path, writes: SheetWrites
-) -> None:
+) -> set[SkippedRef]:
     """Copy template and apply cell-level XML edits to specific sheets."""
     if not writes:
         shutil.copy2(template_path, output_path)
-        return
+        return set()
 
     sheet_to_zip_path = _build_sheet_map(template_path)
 
     modified_zip_paths: dict[str, bytes] = {}
+    skipped: set[SkippedRef] = set()
     with zipfile.ZipFile(template_path, "r") as zf_in:
         for target_sheet, cell_writes in writes.items():
             zip_path = sheet_to_zip_path.get(target_sheet)
             if zip_path is None:
                 continue
             original_xml = zf_in.read(zip_path)
-            modified_xml = _patch_sheet_xml(original_xml, cell_writes)
+            modified_xml, sheet_skipped = _patch_sheet_xml(
+                original_xml, target_sheet, cell_writes)
             modified_zip_paths[zip_path] = modified_xml
+            skipped.update(sheet_skipped)
 
     _rebuild_zip(template_path, output_path, modified_zip_paths)
+    return skipped
 
 
 def _build_sheet_map(xlsx_path: Path) -> dict[str, str]:
@@ -120,8 +137,8 @@ def _parse_ref(ref: str) -> tuple[int, int]:
 
 
 def _patch_sheet_xml(
-    original_xml: bytes, cell_writes: list[CellWrite]
-) -> bytes:
+    original_xml: bytes, sheet_name: str, cell_writes: list[CellWrite]
+) -> tuple[bytes, list[SkippedRef]]:
     """Modify cells, preserving bytes outside <sheetData>.
 
     Strategy: parse the full document with lxml to modify cells, but only
@@ -131,17 +148,27 @@ def _patch_sheet_xml(
     formatting. Inside <sheetData>, \\r\\n in cached formula values is
     restored after serialization (lxml normalizes \\r\\n -> \\n per the XML
     spec, but Excel expects its original \\r\\n back).
+
+    A write targeting a cell that already holds a formula in the template
+    is skipped rather than applied: blindly overwriting it would delete
+    that formula, and if the cell happens to be the master of a shared
+    formula group (``<f t="shared" ref="...">``), every dependent cell in
+    that range loses its definition, which is exactly what makes Excel
+    flag the written file for repair on open. This is a defense-in-depth
+    check -- the field map is supposed to only ever target designer-input
+    cells -- so a skip here means an upstream locator bug reached past
+    its intended range, not that this is expected behavior.
     """
     original_text = original_xml.decode("UTF-8")
 
     sd_open_pos = original_text.find("<sheetData")
     if sd_open_pos == -1:
-        return original_xml
+        return original_xml, []
 
     sd_close_tag = "</sheetData>"
     sd_close_pos = original_text.find(sd_close_tag)
     if sd_close_pos == -1:
-        return original_xml
+        return original_xml, []
     sd_end_pos = sd_close_pos + len(sd_close_tag)
 
     original_sd_text = original_text[sd_open_pos:sd_end_pos]
@@ -152,13 +179,15 @@ def _patch_sheet_xml(
 
     sheet_data = root.find(f"{ns}sheetData")
     if sheet_data is None:
-        return original_xml
+        return original_xml, []
 
     row_elements: dict[int, etree._Element] = {}
     for row_el in sheet_data.findall(f"{ns}row"):
         r = row_el.get("r")
         if r and r.isdigit():
             row_elements[int(r)] = row_el
+
+    skipped: list[SkippedRef] = []
 
     for col_letter, row_num, value in cell_writes:
         ref = _cell_ref(col_letter, row_num)
@@ -175,6 +204,16 @@ def _patch_sheet_xml(
                 cell_el = c
                 break
 
+        if cell_el is not None and cell_el.find(f"{ns}f") is not None:
+            logger.warning(
+                "Refusing to overwrite formula cell %r!%s with %r -- "
+                "the field map likely resolved a row range past its "
+                "intended block, skipping this write",
+                sheet_name, ref, value,
+            )
+            skipped.append((sheet_name, col_letter, row_num))
+            continue
+
         if cell_el is None:
             cell_el = etree.SubElement(row_el, f"{ns}c")
             cell_el.set("r", ref)
@@ -187,8 +226,9 @@ def _patch_sheet_xml(
     if has_crlf:
         new_sd = new_sd.replace("\n", "\r\n")
 
-    return (original_text[:sd_open_pos] + new_sd +
-            original_text[sd_end_pos:]).encode("UTF-8")
+    patched = (original_text[:sd_open_pos] + new_sd +
+               original_text[sd_end_pos:]).encode("UTF-8")
+    return patched, skipped
 
 
 def _set_cell_value(cell_el: etree._Element, value: Any, ns: str) -> None:
