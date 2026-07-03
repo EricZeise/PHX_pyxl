@@ -417,6 +417,19 @@ def _write_named_range(
         for title, coord in defn.destinations:
             from openpyxl.utils.cell import coordinate_from_string
             col_letter, row_num = coordinate_from_string(coord)
+            if title.lower().endswith(" si"):
+                # Excel's own defined-name table points several German
+                # named ranges (e.g. Klima_Region, Klima_Standort) at a
+                # "<Name> SI" mirror cell that's a passthrough formula, not
+                # the real input cell -- writing there would just get
+                # refused by surgical_writer's formula-cell protection.
+                # Redirect to the base tab's same coordinate instead,
+                # mirroring the read-side fix in locators.py's
+                # resolve_named_range / _resolve_si_mirror_passthrough.
+                base_title = resolve_sheet_name(
+                    title[: -len(" SI")], wb_labels.sheetnames)
+                if base_title is not None:
+                    title = base_title
             pending.append((title, col_letter, row_num, value))
             return True
     except (KeyError, AttributeError):

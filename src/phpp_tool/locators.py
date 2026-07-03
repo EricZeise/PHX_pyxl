@@ -365,6 +365,36 @@ def resolve_block(
 # Strategy 3: Named range
 # ---------------------------------------------------------------------------
 
+_NOT_FOUND = object()
+
+
+def _resolve_si_mirror_passthrough(
+    wb_vals, wb_fmls, title: str, coord: str,
+) -> Any:
+    """Fall back to the base-tab counterpart of a "<Name> SI" formula cell.
+
+    Some Excel-internal defined names (e.g. `Klima_Region`, `Klima_Standort`)
+    resolve to a cell on the "<Name> SI" mirror tab whose formula (typically
+    `=IF(ISTEXT(<Name>!<coord>),<Name>!<coord>,"")`) just passes through the
+    real designer input that lives at the same coordinate on the base tab --
+    this is Excel's own defined-name table pointing there, not a choice the
+    field map's `sheet_name` makes, so the existing per-version sheet_name
+    fix (see locators.py module docstring / concern #24) can't route around
+    it. Only applies when *title* actually ends in " SI" and the base tab's
+    same-coordinate cell is itself not a formula; otherwise returns
+    _NOT_FOUND so the caller keeps its existing behavior.
+    """
+    if not title.lower().endswith(" si"):
+        return _NOT_FOUND
+    base_title = resolve_sheet_name(title[: -len(" SI")], wb_vals.sheetnames)
+    if base_title is None:
+        return _NOT_FOUND
+    base_fval = wb_fmls[base_title][coord].value
+    if isinstance(base_fval, str) and base_fval.startswith("="):
+        return _NOT_FOUND
+    return wb_vals[base_title][coord].value
+
+
 def resolve_named_range(
     wb_vals, wb_fmls, name: str, *, skip_formulas: bool = False,
 ) -> Any:
@@ -388,6 +418,10 @@ def resolve_named_range(
             cell_f = ws_f[coord]
             fval = cell_f.value
             if isinstance(fval, str) and fval.startswith("="):
+                base_value = _resolve_si_mirror_passthrough(
+                    wb_vals, wb_fmls, title, coord)
+                if base_value is not _NOT_FOUND:
+                    return base_value
                 return None
         return cell_v.value
 
