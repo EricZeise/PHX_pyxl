@@ -29,7 +29,11 @@ What this test does:
     checks cache freshness of the original), this test confirms that the
     written workbook produces the same calculation results as the original.
 
-Results are saved to records/verify_excel_<timestamp>/.
+Results are saved to records/verify_excel_<timestamp>/:
+    - <source>_all.json / <written>_all.json -- full field reads
+    - verify_excel_summary.json -- counts only (checked/matched/mismatched)
+    - verify_excel_details.txt -- every mismatch, untruncated (the terminal
+      output above caps the printed list at 30)
 """
 
 from __future__ import annotations
@@ -216,7 +220,8 @@ def verify_excel(
         for d in details[:30]:
             print(d)
         if len(details) > 30:
-            print(f"      ... and {len(details) - 30} more")
+            print(f"      ... and {len(details) - 30} more"
+                  f" (full list saved to verify_excel_details.txt)")
 
     total_t = t_read_orig + t_read_written + t_compare
     print(f"\n      {t_compare:.1f}s compare,"
@@ -239,6 +244,19 @@ def verify_excel(
     summary_path = out_dir / "verify_excel_summary.json"
     summary_path.write_text(
         json.dumps(result, indent=2, default=str), encoding="utf-8")
+
+    # Full, untruncated mismatch details -- the screen output above caps at
+    # 30 for readability, but this file keeps every one so a later session
+    # doesn't have to reconstruct them from the *_all.json dumps by hand.
+    details_path = out_dir / "verify_excel_details.txt"
+    if mismatched == 0:
+        details_text = f"All {checked} fields match -- FULL FIDELITY CONFIRMED\n"
+    else:
+        details_text = (
+            f"{checked} checked, {matched} matched, {mismatched} MISMATCHES:\n"
+            + "\n".join(details) + "\n"
+        )
+    details_path.write_text(details_text, encoding="utf-8")
 
     return result
 
