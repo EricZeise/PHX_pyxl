@@ -73,7 +73,7 @@ def read(workbook: str, output: str | None, phpp_version: str,
     resolved_map = _resolve_field_map(phpp_version, field_map)
     data = read_phpp(workbook, resolved_map)
     record = BuildingRecord.from_reader_dict(data)
-    record_dict = json.loads(record.to_json())
+    record_dict = record.model_dump(mode="json", exclude_none=True)
     record_dict["_phpp_version"] = phpp_version
     json_str = json.dumps(record_dict, indent=2)
 

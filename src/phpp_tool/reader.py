@@ -25,10 +25,12 @@ from openpyxl.worksheet.worksheet import Worksheet
 from phpp_tool.locators import (
     WsPair,
     field_col,
+    field_row_offset,
     find_row_in_col,
     is_label_anchored_formula,
     resolve_absolute,
     resolve_block,
+    resolve_entry_row_start,
     resolve_fixed,
     resolve_label_anchored,
     resolve_named_range,
@@ -256,9 +258,7 @@ def _read_section(
     has_appliance = "appliance_rows" in sec_spec
 
     items = sec_spec.get("items", {})
-    entry_row_start = (items.get("entry_row_start")
-                       or items.get("entry_start_row")
-                       or items.get("start_row"))
+    entry_row_start = resolve_entry_row_start(items)
     sf = skip_formulas
 
     if has_header and has_entry and has_row_fields and not has_col_fields:
@@ -323,7 +323,7 @@ def _read_row_offset_section(
     input_col = sec_spec.get("items", {}).get("input_col_start", "J")
     result: dict[str, Any] = {}
     for field_name, field_spec in sec_spec["row_fields"].items():
-        offset = field_spec.get("row_offset", field_spec.get("row", 0))
+        offset = field_row_offset(field_spec)
         result[field_name] = resolve_row_offset(
             ws_pair, anchor_row, input_col, offset,
             skip_formulas=skip_formulas)
@@ -363,7 +363,7 @@ def _read_column_row_section(
         col_letter = field_col(col_spec)
         entity: dict[str, Any] = {}
         for field_name, field_spec in sec_spec["row_fields"].items():
-            offset = field_spec.get("row_offset", field_spec.get("row", 0))
+            offset = field_row_offset(field_spec)
             entity[field_name] = resolve_row_offset(
                 ws_pair, entry_row_start, col_letter, offset,
                 skip_formulas=skip_formulas)

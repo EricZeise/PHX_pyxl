@@ -17,14 +17,18 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.utils.cell import coordinate_from_string
 from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from phpp_tool.locators import (
+    base_sheet_for_si_mirror,
     field_col,
+    field_row_offset,
     find_row_in_col,
     is_entry_row_header,
     parse_cell_ref,
+    resolve_entry_row_start,
     resolve_sheet_name,
 )
 from phpp_tool.map_parser import parse_field_map
@@ -190,9 +194,7 @@ def _write_section(
     has_fields = "fields" in sec_spec
 
     items = sec_spec.get("items", {})
-    entry_row_start = (items.get("entry_row_start")
-                       or items.get("entry_start_row")
-                       or items.get("start_row"))
+    entry_row_start = resolve_entry_row_start(items)
 
     if has_header and has_entry and has_row_fields and not has_col_fields:
         return _write_row_offset(ws_labels, sheet_name, sec_spec, sec_data,
@@ -300,7 +302,7 @@ def _write_row_offset(
         value = data.get(field_name)
         if value is None:
             continue
-        offset = field_spec.get("row_offset", field_spec.get("row", 0))
+        offset = field_row_offset(field_spec)
         if _write_cell(sheet_name, input_col, anchor_row + offset, value,
                        pending):
             count += 1
@@ -337,7 +339,7 @@ def _write_column_row(
             value = entity_data.get(field_name)
             if value is None:
                 continue
-            offset = field_spec.get("row_offset", field_spec.get("row", 0))
+            offset = field_row_offset(field_spec)
             if _write_cell(sheet_name, col_letter, entry_row_start + offset,
                            value, pending):
                 count += 1
@@ -415,7 +417,6 @@ def _write_named_range(
     try:
         defn = wb_labels.defined_names[name]
         for title, coord in defn.destinations:
-            from openpyxl.utils.cell import coordinate_from_string
             if ":" in coord:
                 # Multi-cell destination -- PHPP defines several device-
                 # type-name ranges broader than the single value they hold
@@ -425,19 +426,16 @@ def _write_named_range(
                 # resolve_named_range.
                 coord = coord.split(":")[0]
             col_letter, row_num = coordinate_from_string(coord)
-            if title.lower().endswith(" si"):
-                # Excel's own defined-name table points several German
-                # named ranges (e.g. Klima_Region, Klima_Standort) at a
-                # "<Name> SI" mirror cell that's a passthrough formula, not
-                # the real input cell -- writing there would just get
-                # refused by surgical_writer's formula-cell protection.
-                # Redirect to the base tab's same coordinate instead,
-                # mirroring the read-side fix in locators.py's
-                # resolve_named_range / _resolve_si_mirror_passthrough.
-                base_title = resolve_sheet_name(
-                    title[: -len(" SI")], wb_labels.sheetnames)
-                if base_title is not None:
-                    title = base_title
+            # Excel's own defined-name table points several German named
+            # ranges (e.g. Klima_Region, Klima_Standort) at a "<Name> SI"
+            # mirror cell that's a passthrough formula, not the real input
+            # cell -- writing there would just get refused by
+            # surgical_writer's formula-cell protection. Redirect to the
+            # base tab's same coordinate instead, mirroring the read-side
+            # fix in locators.py's resolve_named_range.
+            base_title = base_sheet_for_si_mirror(title, wb_labels.sheetnames)
+            if base_title is not None:
+                title = base_title
             pending.append((title, col_letter, row_num, value))
             return True
     except (KeyError, AttributeError):

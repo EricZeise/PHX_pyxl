@@ -33,7 +33,7 @@ def diff_dicts(
 ) -> list[dict[str, Any]]:
     """Compare two dicts, returning difference records."""
     diffs: list[dict[str, Any]] = []
-    all_keys = sorted(set(list(d1.keys()) + list(d2.keys())))
+    all_keys = sorted(d1.keys() | d2.keys())
 
     for k in all_keys:
         p = f"{path}.{k}" if path else k
@@ -100,16 +100,34 @@ def compare(file1: dict, file2: dict) -> dict[str, Any]:
     total_f2 = count_fields(file2)
     cats = Counter(d["type"] for d in diffs)
 
-    row_diffs = [d for d in diffs if d["type"]
-                 == "value_diff" and "_row" in d["path"]]
-    real_value = [d for d in diffs if d["type"] ==
-                  "value_diff" and "_row" not in d["path"]]
-    v2n = [d for d in diffs if d["type"] == "value_to_null"]
-    n2v = [d for d in diffs if d["type"] == "null_to_value"]
-    missing = [d for d in diffs if d["type"] == "missing"]
-    added = [d for d in diffs if d["type"] == "added"]
-    fr = [d for d in diffs if d["type"] == "float_rounding"]
-    ll = [d for d in diffs if d["type"] == "list_len"]
+    # Every diff belongs to exactly one bucket below (value_diff further
+    # splits on whether it's just _row metadata drift) -- one pass instead
+    # of filtering the same list eight separate times.
+    row_diffs: list[dict[str, Any]] = []
+    real_value: list[dict[str, Any]] = []
+    v2n: list[dict[str, Any]] = []
+    n2v: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    added: list[dict[str, Any]] = []
+    fr: list[dict[str, Any]] = []
+    ll: list[dict[str, Any]] = []
+
+    for d in diffs:
+        t = d["type"]
+        if t == "value_diff":
+            (row_diffs if "_row" in d["path"] else real_value).append(d)
+        elif t == "value_to_null":
+            v2n.append(d)
+        elif t == "null_to_value":
+            n2v.append(d)
+        elif t == "missing":
+            missing.append(d)
+        elif t == "added":
+            added.append(d)
+        elif t == "float_rounding":
+            fr.append(d)
+        elif t == "list_len":
+            ll.append(d)
 
     meaningful = len(real_value) + len(v2n) + \
         len(n2v) + len(missing) + len(added)
@@ -269,11 +287,8 @@ def format_report(
         for d in ll:
             delta = d["rt"] - d["orig"]
             lines.append(
-                f"  {
-                    d['path']:50s} {
-                    d['orig']:>4} rows → {
-                    d['rt']:>4} rows  (delta: {
-                    delta:+d})")
+                f"  {d['path']:50s} {d['orig']:>4} rows"
+                f" → {d['rt']:>4} rows  (delta: {delta:+d})")
         lines.append("")
 
     # Missing keys

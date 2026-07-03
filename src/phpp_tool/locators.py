@@ -64,6 +64,19 @@ def resolve_sheet_name(sheet_name: str, sheet_names: list[str]) -> str | None:
     return None
 
 
+def base_sheet_for_si_mirror(title: str, sheet_names: list[str]) -> str | None:
+    """Return the base-tab name for a "<Name> SI"-suffixed sheet, or None.
+
+    Returns None if *title* doesn't end in " SI" (case-insensitive) or no
+    matching base sheet exists in *sheet_names*. Shared by the read-side
+    SI-mirror-passthrough fallback and the write-side named-range redirect
+    (both need to answer "what's the base tab for this SI sheet?").
+    """
+    if not title.lower().endswith(" si"):
+        return None
+    return resolve_sheet_name(title[: -len(" SI")], sheet_names)
+
+
 def col_to_idx(col: str) -> int:
     """Convert column letters (A, ..., AA) to 1-based index."""
     result = 0
@@ -75,6 +88,18 @@ def col_to_idx(col: str) -> int:
 def field_col(spec: str | dict) -> str:
     """Extract column letter from a field spec (string or dict with 'column')."""
     return spec if isinstance(spec, str) else spec.get("column", "A")
+
+
+def field_row_offset(spec: dict) -> int:
+    """Extract a row offset from a field spec: 'row_offset', else 'row', else 0."""
+    return spec.get("row_offset", spec.get("row", 0))
+
+
+def resolve_entry_row_start(items: dict) -> int | None:
+    """Look up a block's entry-start row from any of its recognized key aliases."""
+    return (items.get("entry_row_start")
+            or items.get("entry_start_row")
+            or items.get("start_row"))
 
 
 def _is_formula(ws_fmls: Worksheet, col_idx: int, row: int) -> bool:
@@ -384,9 +409,7 @@ def _resolve_si_mirror_passthrough(
     same-coordinate cell is itself not a formula; otherwise returns
     _NOT_FOUND so the caller keeps its existing behavior.
     """
-    if not title.lower().endswith(" si"):
-        return _NOT_FOUND
-    base_title = resolve_sheet_name(title[: -len(" SI")], wb_vals.sheetnames)
+    base_title = base_sheet_for_si_mirror(title, wb_vals.sheetnames)
     if base_title is None:
         return _NOT_FOUND
     base_fval = wb_fmls[base_title][coord].value
@@ -444,12 +467,8 @@ def resolve_absolute(
     ws_pair: WsPair, address: str, *, skip_formulas: bool = False,
 ) -> Any:
     """Return the value at a fixed cell reference like 'C11'."""
-    ws_vals, ws_fmls = ws_pair
-    if skip_formulas:
-        fval = ws_fmls[address].value
-        if isinstance(fval, str) and fval.startswith("="):
-            return None
-    return ws_vals[address].value
+    col, row = parse_cell_ref(address)
+    return cell_value(ws_pair, col, row, skip_formulas=skip_formulas)
 
 
 # ---------------------------------------------------------------------------
