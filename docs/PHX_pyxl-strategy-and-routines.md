@@ -75,35 +75,57 @@ This section shows exactly how to invoke everything described in Part 1: the `ph
 ```bash
 cd /Users/smini/Documents/Coding/PHX_pyxl
 source .venv/bin/activate
+python --version		% (should be Python 3.13.3)
 ```
 
 ### `phpp-tool read` — extract a filled workbook to JSON
 
 ```bash
-phpp-tool read Data/Example_IP.xlsx -o records/my_building.json
+phpp-tool read WORKBOOK -o OUTPUT [--phpp-version PHPP_VERSION] [--field-map FIELD_MAP]
 ```
 
-- `WORKBOOK` (positional) — path to the filled `.xlsx` to read.
-- `-o, --output` — JSON output path (omit to print to stdout).
-- `--phpp-version` — resolves `phpp-field-mapping/<version>.md` (default `EN_10_6_IP`). Use `EN_10_6_SI` for a genuinely SI-native single-shell workbook.
-- `--field-map` — direct-path override, bypassing `--phpp-version` entirely.
+- `WORKBOOK` (positional, required) — path to the filled `.xlsx` to read.
+- `-o, --output OUTPUT` — JSON output path (omit to print to stdout).
+- `--phpp-version PHPP_VERSION` — resolves `phpp-field-mapping/<version>.md` (default `EN_10_6_IP`). Use `EN_10_6_SI` for a genuinely SI-native single-shell workbook.
+- `--field-map FIELD_MAP` — direct-path override, bypassing `--phpp-version` entirely.
+
+Example:
+
+```bash
+phpp-tool read Data/Example_IP.xlsx -o records/my_building.json
+```
 
 Internally: `read_phpp()` → `BuildingRecord.from_reader_dict()` → `to_json()`, then stamps the output JSON with `_phpp_version` for the `write` command to cross-check later. Takes roughly 20 seconds for a full PHPP workbook.
 
 ### `phpp-tool write` — inject a JSON record into a blank template
 
 ```bash
-phpp-tool write records/my_building.json Data/Empty_IP.xlsx -o output.xlsx
+phpp-tool write RECORD_FILE TEMPLATE -o OUTPUT [--phpp-version PHPP_VERSION] [--field-map FIELD_MAP]
 ```
 
-- `RECORD_FILE` (positional) — the JSON produced by `read`.
-- `TEMPLATE` (positional) — the blank `.xlsx` to write into.
-- `-o, --output` (required) — path for the written workbook.
-- `--phpp-version` / `--field-map` — same as `read`. **Must match the version the record was read with** — `write` compares `--phpp-version` against the record's stamped `_phpp_version` and prints a warning (not a hard error) on mismatch.
+- `RECORD_FILE` (positional, required) — the JSON produced by `read`.
+- `TEMPLATE` (positional, required) — the blank `.xlsx` to write into.
+- `-o, --output OUTPUT` (required) — path for the written workbook.
+- `--phpp-version PHPP_VERSION` / `--field-map FIELD_MAP` — same as `read`. **Must match the version the record was read with** — `write` compares `--phpp-version` against the record's stamped `_phpp_version` and prints a warning (not a hard error) on mismatch.
+
+Example:
+
+```bash
+phpp-tool write records/my_building.json Data/Empty_IP.xlsx -o output.xlsx
+```
 
 Internally: `model_validate_json()` → `model_dump(exclude_none=True)` → `write_phpp()`. Takes roughly 30 seconds.
 
 ### `phpp-tool inspect-map` — audit field map coverage
+
+```bash
+phpp-tool inspect-map [--phpp-version PHPP_VERSION] [--field-map FIELD_MAP]
+```
+
+- `--phpp-version PHPP_VERSION` — resolves `phpp-field-mapping/<version>.md` (default `EN_10_6_IP`).
+- `--field-map FIELD_MAP` — direct-path override, bypassing `--phpp-version` entirely.
+
+Example:
 
 ```bash
 phpp-tool inspect-map --phpp-version EN_10_6_IP
@@ -114,13 +136,21 @@ Prints every mapped worksheet with its field/section/config counts. Use this aft
 ### `scripts/roundtrip.py` — Parts 1 & 2 verification
 
 ```bash
+python scripts/roundtrip.py [--phpp-version PHPP_VERSION] SOURCE TEMPLATE [SOURCE TEMPLATE ...]
+```
+
+- `--phpp-version PHPP_VERSION` — resolves `phpp-field-mapping/<version>.md` (default `EN_10_6_IP`); if given, must appear before the `SOURCE`/`TEMPLATE` pairs.
+- `SOURCE` (positional, required, repeatable) — filled `.xlsx` to read from.
+- `TEMPLATE` (positional, required, repeatable) — blank `.xlsx` to write into, paired with the `SOURCE` immediately before it. Pass additional `SOURCE TEMPLATE` pairs on the same command line to run several roundtrips in one invocation (results print a combined summary at the end).
+
+Example:
+
+```bash
 python scripts/roundtrip.py Data/Example_IP.xlsx Data/Empty_IP.xlsx
 python scripts/roundtrip.py Data/Empty_IP.xlsx Data/Empty_IP.xlsx
 ```
 
-Arguments come in `source template` pairs — pass more pairs on the same command line to run several roundtrips in one invocation (results print a combined summary at the end). Output artifacts land in `records/roundtrip_<timestamp>/`.
-
-What it runs, phase by phase:
+Output artifacts land in `records/roundtrip_<timestamp>/`. What it runs, phase by phase:
 
 | Phase | Command-line effect |
 |-------|---------------------|
@@ -130,10 +160,19 @@ What it runs, phase by phase:
 ### `scripts/verify_excel.py` — Stage 3 full-fidelity comparison
 
 ```bash
+python scripts/verify_excel.py SOURCE_FILE WRITTEN_FILE
+```
+
+- `SOURCE_FILE` (positional, required) — the original filled `.xlsx`, already opened in Excel and saved manually.
+- `WRITTEN_FILE` (positional, required) — the `roundtrip.py`-produced output `.xlsx`, also already opened in Excel and saved manually.
+
+Example:
+
+```bash
 python scripts/verify_excel.py Data/Example_IP.xlsx records/roundtrip_<timestamp>/Example_written.xlsx
 ```
 
-Exactly two positional arguments: `source_file written_file`. Both files must already have been opened in Excel and saved manually — this refreshes cached formula values so openpyxl can read correct results without live Excel access. Output lands in `records/verify_excel_<timestamp>/`, including a machine-readable `verify_excel_summary.json`.
+Both files must already have been opened in Excel and saved manually — this refreshes cached formula values so openpyxl can read correct results without live Excel access. Output lands in `records/verify_excel_<timestamp>/`, including a machine-readable `verify_excel_summary.json`.
 
 The full three-stage sequence in practice:
 
