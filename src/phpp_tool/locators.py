@@ -293,8 +293,27 @@ def resolve_block(
     consecutive_sparse = 0
 
     for row_num in range(start_row, last_row + 1):
-        marker_val = norm(ws_vals.cell(row=row_num, column=entry_col_idx).value)
+        entry_cell = ws_vals.cell(row=row_num, column=entry_col_idx)
+        marker_val = norm(entry_cell.value)
         if end_marker_n and end_marker_n in marker_val:
+            break
+
+        # A bold entry-column cell is a section title (a totals row, or the
+        # start of an unrelated table below that happens to reuse this
+        # block's column layout), not more block data -- unlike
+        # is_header_row() below, this doesn't depend on every mapped column
+        # in the row happening to be a string, so it also catches rows that
+        # mix a formula-cached number with text (e.g. a "Total ..." summary
+        # row) and rows that otherwise look like valid data. Verified against
+        # every header+entry block in both field-map versions: this is the
+        # only bold row any block currently returns, so this can only ever
+        # narrow (never break) existing results.
+        if marker_val and entry_cell.font and entry_cell.font.bold:
+            logger.debug(
+                "Stopping block scan at row %d in sheet %r -- entry "
+                "column is bold, signaling a new section", row_num,
+                ws_vals.title,
+            )
             break
 
         # Sparse/header detection always looks at raw (unfiltered) values,
