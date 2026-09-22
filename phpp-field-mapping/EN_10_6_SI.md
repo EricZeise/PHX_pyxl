@@ -179,17 +179,38 @@ Worksheet key: `UVALUES`
 | `variants_layer_name` | E | |
 | `variants_conductivity` | F | |
 | `variants_thickness` | G | |
+| `sec_1_percentage` | M |  |
 | `sec_2_percentage` | O |  |
 | `sec_3_percentage` | Q |  |
 
-**Row offsets within each assembly block:**
+**Repeating-block geometry** (a "constructor" entry is one ~21-row block,
+one block per opaque construction, repeating downward from the first
+occurrence of the header locator above; entries confirmed row-for-row
+against a real filled `Example_SI.xlsx` 2026-09-22, identical geometry to
+the IP-shell workbook's own "R-Values" sheet, real SI units throughout
+here -- `sec_1_conductivity`/`sec_2_conductivity`/`sec_3_conductivity` are
+genuine thermal conductivity λ [W/(m·K)] in this workbook, unlike the
+IP-shell one's "R per inch"). Every `*_row_offset` below is 1-indexed
+relative to a block's own header row: `target_row = block_header_row +
+(offset - 1))`. `phpp_id_num` (the auto-numbered "01ud"/"02ud"/... token
+at column `L` + `phpp_id_num_col_offset`, same row as `display_name`) is
+a live PHPP FORMULA computed purely from block position -- never write to
+it; a writer can *predict* it instead from the block's own 0-indexed
+position `i` (`f"0{i+1}ud"` if `i+1 < 10` else `f"{i+1}ud"`) to build a
+matching `assembly_id` (`f"{predicted_id}-{display_name}"`) elsewhere
+(e.g. `AREAS.surface_rows.assembly_id`). `result_val_row_offset`/
+`result_val_col` point at a second formula-driven output cell (the
+block's own computed U-value) -- read-only, for verification, never a
+write target either.
 
+- `block_pitch_rows` (literal): `21`
 - `phpp_id_num_col_offset` (literal): `5`
 - `name_row_offset` (literal): `2`
 - `rsi_row_offset` (literal): `4`
 - `rse_row_offset` (literal): `5`
 - `first_layer_row_offset` (literal): `7`
 - `last_layer_row_offset` (literal): `14`
+- `percentage_row_offset` (literal): `15`
 - `result_val_row_offset` (literal): `19`
 - `result_val_col` (literal): `R`
 - `result_val_unit` (literal): `W/M2K`

@@ -268,19 +268,28 @@ class TestRowOffsetBlock:
         assert sec["column_fields"]["display_name"]["column"] == "L"
         assert sec["column_fields"]["r_si"]["column"] == "M"
         assert sec["column_fields"]["thickness"]["column"] == "R"
-        assert sec["column_fields"]["thickness"]["unit"] == "MM"
+        # IN, not MM: this IP-shell workbook's own "Thickness [in]" column
+        # -- confirmed against a real workbook 2026-09-22 (see the field
+        # map's own "Repeating-block geometry" note).
+        assert sec["column_fields"]["thickness"]["unit"] == "IN"
+        assert sec["column_fields"]["sec_1_percentage"]["column"] == "M"
 
     def test_uvalues_constructor_row_offsets(self, field_map):
         sec = field_map["UVALUES"]["sections"]["constructor"]
         items = sec["items"]
+        assert items["block_pitch_rows"] == 21
         assert items["name_row_offset"] == 2
         assert items["rsi_row_offset"] == 4
         assert items["rse_row_offset"] == 5
         assert items["first_layer_row_offset"] == 7
         assert items["last_layer_row_offset"] == 14
+        assert items["percentage_row_offset"] == 15
         assert items["result_val_row_offset"] == 19
         assert items["result_val_col"] == "R"
-        assert items["result_val_unit"] == "W/M2K"
+        # Real R-value result column, not a U-value -- this IP-shell
+        # workbook's own "R-Values" sheet reports resistance, not
+        # conductance (confirmed against a real workbook 2026-09-22).
+        assert items["result_val_unit"] == "HR.FT2.F/BTU"
 
     def test_dhw_recirc_piping(self, field_map):
         sec = field_map["DHW"]["sections"]["recirc_piping"]

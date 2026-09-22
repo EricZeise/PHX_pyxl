@@ -196,6 +196,8 @@ def _write_section(
     items = sec_spec.get("items", {})
     entry_row_start = resolve_entry_row_start(items)
 
+    if has_header and has_col_fields and "block_pitch_rows" in items and "first_layer_row_offset" in items:
+        return _write_construction_blocks(ws_labels, sheet_name, sec_spec, sec_data, pending)
     if has_header and has_entry and has_row_fields and not has_col_fields:
         return _write_row_offset(ws_labels, sheet_name, sec_spec, sec_data,
                                  pending)
@@ -274,6 +276,86 @@ def _write_block(
         for field_name, field_spec in column_fields.items():
             if _write_cell(sheet_name, field_col(field_spec), target_row,
                            row_data.get(field_name), pending):
+                count += 1
+    return count
+
+
+_CONSTRUCTION_LAYER_FIELDS = (
+    "sec_1_description", "sec_1_conductivity",
+    "sec_2_description", "sec_2_conductivity",
+    "sec_3_description", "sec_3_conductivity",
+    "thickness",
+)
+_CONSTRUCTION_BLOCK_SCALAR_FIELDS = (
+    ("display_name", "name_row_offset"),
+    ("r_si", "rsi_row_offset"),
+    ("interior_insulation", "rsi_row_offset"),
+    ("r_se", "rse_row_offset"),
+    ("u_val_supplement", "rse_row_offset"),
+)
+
+
+def _write_construction_blocks(
+    ws_labels: Worksheet,
+    sheet_name: str,
+    sec_spec: dict[str, Any],
+    blocks_data: list[dict[str, Any]],
+    pending: list[tuple[str, str, int, Any]],
+) -> int:
+    """Write PHPP's own opaque-construction grid -- the write-side mirror
+    of `reader._read_construction_blocks`, see that function's own
+    docstring for the block layout. `phpp_id_num`/`sec_1_percentage` are
+    never written (both live PHPP formulas -- see the field map's own
+    "Repeating-block geometry" note); `_write_cell`'s existing formula
+    guard (via `surgical_writer`'s own skip-if-formula check) would catch
+    an attempt anyway, but this never generates one to begin with. Each
+    block is written at the *next* available block position after the
+    template's own first block header (not matched up with any existing
+    block by name) -- exporting into a blank template, not merging into
+    a partially-filled one."""
+    if not isinstance(blocks_data, list):
+        return 0
+    hdr = sec_spec["header_locator"]
+    items = sec_spec["items"]
+    fields = sec_spec["column_fields"]
+
+    first_header_row = find_row_in_col(ws_labels, hdr["col"], hdr["string"])
+    if first_header_row is None:
+        logger.warning("Header locator %r not found for construction blocks",
+                       hdr["string"])
+        return 0
+
+    pitch = items["block_pitch_rows"]
+    count = 0
+    for i, block in enumerate(blocks_data):
+        header_row = first_header_row + i * pitch
+        for field_name, offset_key in _CONSTRUCTION_BLOCK_SCALAR_FIELDS:
+            row = header_row + items[offset_key] - 1
+            if _write_cell(sheet_name, field_col(fields[field_name]), row,
+                           block.get(field_name), pending):
+                count += 1
+
+        layers = block.get("layers") or []
+        first_layer_row = header_row + items["first_layer_row_offset"] - 1
+        last_layer_row = header_row + items["last_layer_row_offset"] - 1
+        max_layers = last_layer_row - first_layer_row + 1
+        if len(layers) > max_layers:
+            logger.warning(
+                "Construction %r has %d layers, more than the %d PHPP "
+                "reserves per assembly -- only the first %d were written",
+                block.get("display_name"), len(layers), max_layers, max_layers,
+            )
+        for j, layer in enumerate(layers[:max_layers]):
+            row = first_layer_row + j
+            for field_name in _CONSTRUCTION_LAYER_FIELDS:
+                if _write_cell(sheet_name, field_col(fields[field_name]), row,
+                               layer.get(field_name), pending):
+                    count += 1
+
+        pct_row = header_row + items["percentage_row_offset"] - 1
+        for field_name in ("sec_2_percentage", "sec_3_percentage"):
+            if _write_cell(sheet_name, field_col(fields[field_name]), pct_row,
+                           block.get(field_name), pending):
                 count += 1
     return count
 

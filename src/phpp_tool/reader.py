@@ -23,7 +23,10 @@ from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from phpp_tool.locators import (
+    SPARSE_ROW_BREAK_THRESHOLD,
     WsPair,
+    cell_value,
+    col_to_idx,
     field_col,
     field_row_offset,
     find_row_in_col,
@@ -261,6 +264,8 @@ def _read_section(
     entry_row_start = resolve_entry_row_start(items)
     sf = skip_formulas
 
+    if has_header and has_col_fields and "block_pitch_rows" in items and "first_layer_row_offset" in items:
+        return _read_construction_blocks(ws_pair, sec_spec, skip_formulas=sf)
     if has_header and has_entry and has_row_fields and not has_col_fields:
         return _read_row_offset_section(ws_pair, sec_spec, skip_formulas=sf)
     if has_col_fields and has_row_fields:
@@ -308,6 +313,113 @@ def _read_block_section(
         entry_row_start=entry_row_start,
         skip_formulas=skip_formulas,
     )
+
+
+_CONSTRUCTION_LAYER_FIELDS = (
+    "sec_1_description", "sec_1_conductivity",
+    "sec_2_description", "sec_2_conductivity",
+    "sec_3_description", "sec_3_conductivity",
+    "thickness",
+)
+_CONSTRUCTION_PERCENTAGE_FIELDS = ("sec_1_percentage", "sec_2_percentage", "sec_3_percentage")
+
+
+def _read_construction_blocks(
+    ws_pair: WsPair, sec_spec: dict[str, Any],
+    *, skip_formulas: bool = True,
+) -> list[dict[str, Any]]:
+    """PHPP's own opaque-construction grid ("R-Values"/"U-values" sheet):
+    one ~21-row block per assembly, repeating downward from the header
+    locator's first match -- see the field map's own "Repeating-block
+    geometry" note (confirmed against a real workbook) for the exact
+    layout. Distinct enough from every other section shape in this file
+    (a fixed-pitch block of *rows*, not a one-row-per-entry list) that it
+    needs its own reader rather than being forced through the generic
+    column_fields/row_fields dispatch -- mirrors `resolve_block`'s own
+    "stop after a run of blank entries" convention (`SPARSE_ROW_BREAK_
+    THRESHOLD`), just stepping by `block_pitch_rows` instead of by 1.
+
+    Each block's own auto-numbered `phpp_id_num` ("01ud", "02ud", ...) is
+    a live PHPP formula (see the field map's own note) -- read here for
+    completeness/cross-checking, but a writer must predict it from block
+    position (`locators.predicted_phpp_id_num`) rather than write it."""
+    items = sec_spec["items"]
+    fields = sec_spec["column_fields"]
+    hdr = sec_spec["header_locator"]
+    ws_vals, _ws_fmls = ws_pair
+
+    first_header_row = find_row_in_col(ws_vals, hdr["col"], hdr["string"])
+    if first_header_row is None:
+        logger.warning("Header locator %r not found for construction blocks",
+                       hdr["string"])
+        return []
+
+    pitch = items["block_pitch_rows"]
+    name_col = field_col(fields["display_name"])
+    id_col = _shift_col(name_col, items["phpp_id_num_col_offset"])
+    max_row = ws_vals.max_row or first_header_row
+
+    blocks: list[dict[str, Any]] = []
+    header_row = first_header_row
+    consecutive_blank = 0
+    block_index = 0
+    while header_row <= max_row:
+        name_row = header_row + items["name_row_offset"] - 1
+        display_name = cell_value(ws_pair, name_col, name_row, skip_formulas=skip_formulas)
+        if not display_name:
+            consecutive_blank += 1
+            if consecutive_blank >= SPARSE_ROW_BREAK_THRESHOLD:
+                break
+            header_row += pitch
+            block_index += 1
+            continue
+        consecutive_blank = 0
+
+        rsi_row = header_row + items["rsi_row_offset"] - 1
+        rse_row = header_row + items["rse_row_offset"] - 1
+        block: dict[str, Any] = {
+            "display_name": display_name,
+            "phpp_id_num": cell_value(ws_pair, id_col, name_row, skip_formulas=False),
+            "r_si": cell_value(ws_pair, field_col(fields["r_si"]), rsi_row, skip_formulas=skip_formulas),
+            "interior_insulation": cell_value(
+                ws_pair, field_col(fields["interior_insulation"]), rsi_row, skip_formulas=skip_formulas),
+            "r_se": cell_value(ws_pair, field_col(fields["r_se"]), rse_row, skip_formulas=skip_formulas),
+            "u_val_supplement": cell_value(
+                ws_pair, field_col(fields["u_val_supplement"]), rse_row, skip_formulas=skip_formulas),
+        }
+
+        layers: list[dict[str, Any]] = []
+        first_layer_row = header_row + items["first_layer_row_offset"] - 1
+        last_layer_row = header_row + items["last_layer_row_offset"] - 1
+        for row in range(first_layer_row, last_layer_row + 1):
+            layer = {
+                key: cell_value(ws_pair, field_col(fields[key]), row, skip_formulas=skip_formulas)
+                for key in _CONSTRUCTION_LAYER_FIELDS
+            }
+            # A real layer needs at least a first-section material name --
+            # not just any non-None field. A stray leftover `thickness`
+            # value (e.g. a literal 0 someone typed and never cleared) in
+            # an otherwise-blank row is real data seen in a real workbook,
+            # not a real layer.
+            if layer["sec_1_description"] is not None:
+                layers.append(layer)
+        block["layers"] = layers
+
+        pct_row = header_row + items["percentage_row_offset"] - 1
+        for key in _CONSTRUCTION_PERCENTAGE_FIELDS:
+            block[key] = cell_value(ws_pair, field_col(fields[key]), pct_row, skip_formulas=skip_formulas)
+
+        blocks.append(block)
+        header_row += pitch
+        block_index += 1
+
+    return blocks
+
+
+def _shift_col(col: str, offset: int) -> str:
+    """Column letter *offset* columns to the right of *col*."""
+    from openpyxl.utils import get_column_letter
+    return get_column_letter(col_to_idx(col) + offset)
 
 
 def _read_row_offset_section(

@@ -154,7 +154,7 @@ Worksheet key: `CLIMATE`
 
 ---
 
-## U-Values
+## R-Values
 
 Worksheet key: `UVALUES`
 
@@ -165,34 +165,57 @@ Worksheet key: `UVALUES`
 | Field | Column | Unit |
 |-------|--------|------|
 | `display_name` | L |  |
-| `r_si` | M | M2K/W |
-| `r_se` | M | M2K/W |
+| `r_si` | M | HR.FT2.F/BTU |
+| `r_se` | M | HR.FT2.F/BTU |
 | `interior_insulation` | R |  |
 | `sec_1_description` | L |  |
-| `sec_1_conductivity` | M | W/MK |
+| `sec_1_conductivity` | M | HR.FT2.F/(BTU.IN) |
 | `sec_2_description` | N |  |
-| `sec_2_conductivity` | O | W/MK |
+| `sec_2_conductivity` | O | HR.FT2.F/(BTU.IN) |
 | `sec_3_description` | P |  |
-| `sec_3_conductivity` | Q | W/MK |
-| `thickness` | R | MM |
-| `u_val_supplement` | R | W/M2K |
+| `sec_3_conductivity` | Q | HR.FT2.F/(BTU.IN) |
+| `thickness` | R | IN |
+| `u_val_supplement` | R | BTU/(HR.FT2.F) |
 | `variants_layer_name` | E | |
 | `variants_conductivity` | F | |
 | `variants_thickness` | G | |
+| `sec_1_percentage` | M |  |
 | `sec_2_percentage` | O |  |
 | `sec_3_percentage` | Q |  |
 
-**Row offsets within each assembly block:**
+**Repeating-block geometry** (a "constructor" entry is one ~21-row block,
+one block per opaque construction, repeating downward from the first
+occurrence of the header locator above; entries confirmed row-for-row
+against a real filled workbook 2026-09-22 -- `sec_1_conductivity`/`sec_2_
+conductivity`/`sec_3_conductivity` are R-VALUE-PER-INCH in this IP-shell
+workbook specifically (`"R per inch"`, i.e. thermal resistance, the
+inverse-ish quantity from conductivity), not literal thermal conductivity
+-- a caller must convert, not just relabel, when going to/from SI λ
+[W/(m·K)]. Every `*_row_offset` below is 1-indexed relative to a block's
+own header row: `target_row = block_header_row + (offset - 1))`.
+`phpp_id_num` (the auto-numbered "01ud"/"02ud"/... token at column `L`
++ `phpp_id_num_col_offset`, same row as `display_name`) is a live PHPP
+FORMULA computed purely from block position -- confirmed
+(`=IF((ROW()-ROW($Q$8))/21+1<10,0,"")&(ROW()-ROW($Q$8))/21+1&"ud"`) --
+never write to it; a writer can *predict* it instead from the block's own
+0-indexed position `i` (`f"0{i+1}ud"` if `i+1 < 10` else `f"{i+1}ud"`) to
+build a matching `assembly_id` (`f"{predicted_id}-{display_name}"`)
+elsewhere (e.g. `AREAS.surface_rows.assembly_id`). `result_val_row_offset`/
+`result_val_col` point at a second formula-driven output cell (the block's
+own computed R-value/U-value) -- read-only, for verification, never a
+write target either.
 
+- `block_pitch_rows` (literal): `21`
 - `phpp_id_num_col_offset` (literal): `5`
 - `name_row_offset` (literal): `2`
 - `rsi_row_offset` (literal): `4`
 - `rse_row_offset` (literal): `5`
 - `first_layer_row_offset` (literal): `7`
 - `last_layer_row_offset` (literal): `14`
+- `percentage_row_offset` (literal): `15`
 - `result_val_row_offset` (literal): `19`
 - `result_val_col` (literal): `R`
-- `result_val_unit` (literal): `W/M2K`
+- `result_val_unit` (literal): `HR.FT2.F/BTU`
 
 ---
 

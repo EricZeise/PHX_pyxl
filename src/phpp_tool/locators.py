@@ -77,6 +77,20 @@ def base_sheet_for_si_mirror(title: str, sheet_names: list[str]) -> str | None:
     return resolve_sheet_name(title[: -len(" SI")], sheet_names)
 
 
+def predicted_phpp_id_num(block_index: int) -> str:
+    """The auto-numbered token ("01ud", "02ud", ..., "10ud", ...) PHPP's
+    own live formula computes for the *block_index*-th (0-indexed)
+    construction block in the U-Values/R-Values grid, purely from block
+    position -- confirmed directly from a real workbook's own formula:
+    ``=IF((ROW()-ROW($Q$8))/21+1<10,0,"")&(ROW()-ROW($Q$8))/21+1&"ud"``.
+    Never write to that cell (it's a formula); use this instead wherever
+    another worksheet needs to reference a construction by its PHPP
+    dropdown value (e.g. ``f"{predicted_phpp_id_num(i)}-{display_name}"``
+    for an `AREAS.surface_rows.assembly_id`-style field)."""
+    n = block_index + 1
+    return f"{'0' if n < 10 else ''}{n}ud"
+
+
 def col_to_idx(col: str) -> int:
     """Convert column letters (A, ..., AA) to 1-based index."""
     result = 0
