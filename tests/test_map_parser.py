@@ -134,7 +134,10 @@ class TestHeaderEntryBlock:
         assert "quantity" in sec["column_fields"]
         assert sec["column_fields"]["quantity"]["column"] == "L"
         assert sec["column_fields"]["width"]["column"] == "R"
-        assert sec["column_fields"]["width"]["unit"] == "M"
+        # FT, not M: this IP-shell workbook's own real "Width"/"ft" column
+        # header -- confirmed against a real workbook 2026-09-22 (same
+        # class of stale-unit fix as UVALUES's own thickness/conductivity).
+        assert sec["column_fields"]["width"]["unit"] == "FT"
 
     def test_window_rows_end(self, field_map):
         sec = field_map["WINDOWS"]["sections"]["window_rows_end"]
@@ -151,7 +154,8 @@ class TestHeaderEntryBlock:
         assert sec["header_locator"]["string"] == "Area input"
         assert sec["entry_locator"]["string"] == "1"
         assert sec["column_fields"]["area"]["column"] == "T"
-        assert sec["column_fields"]["area"]["unit"] == "M2"
+        # FT2, not M2: confirmed against a real workbook 2026-09-22.
+        assert sec["column_fields"]["area"]["unit"] == "FT2"
 
     def test_areas_thermal_bridge_rows(self, field_map):
         sec = field_map["AREAS"]["sections"]["thermal_bridge_rows"]

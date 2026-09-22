@@ -245,7 +245,7 @@ Worksheet key: `AREAS`
 | `description` | L |  |
 | `group_number` | M |  |
 | `quantity` | N |  |
-| `area` | T | M2 |
+| `area` | T | FT2 |
 | `assembly_id` | AA |  |
 | `orientation` | AE |  |
 | `angle` | AF |  |
@@ -263,8 +263,8 @@ Worksheet key: `AREAS`
 | `description` | L |  |
 | `group_number` | M |  |
 | `quantity` | N |  |
-| `length` | P | M |
-| `psi_value` | V | W/MK |
+| `length` | P | FT |
+| `psi_value` | V | BTU/(HR.FT.F) |
 | `fRsi_value` | X |  |
 
 ### defined_ranges
@@ -303,22 +303,22 @@ Worksheet key: `COMPONENTS`
 |-------|--------|------|
 | `id` | IO |  |
 | `description` | IP |  |
-| `u_value_left` | IU | W/M2K |
-| `u_value_right` | IW | W/M2K |
-| `u_value_bottom` | JA | W/M2K |
-| `u_value_top` | IY | W/M2K |
-| `width_left` | IT | MM |
-| `width_right` | IV | MM |
-| `width_bottom` | IZ | MM |
-| `width_top` | IX | MM |
-| `psi_g_left` | IR | W/MK |
-| `psi_g_right` | IR | W/MK |
-| `psi_g_bottom` | IR | W/MK |
-| `psi_g_top` | IR | W/MK |
-| `psi_i_left` | JZ | W/MK |
-| `psi_i_right` | JZ | W/MK |
-| `psi_i_bottom` | KB | W/MK |
-| `psi_i_top` | KA | W/MK |
+| `u_value_left` | IU | BTU/(HR.FT2.F) |
+| `u_value_right` | IW | BTU/(HR.FT2.F) |
+| `u_value_bottom` | JA | BTU/(HR.FT2.F) |
+| `u_value_top` | IY | BTU/(HR.FT2.F) |
+| `width_left` | IT | IN |
+| `width_right` | IV | IN |
+| `width_bottom` | IZ | IN |
+| `width_top` | IX | IN |
+| `psi_g_left` | IR | BTU/(HR.FT.F) |
+| `psi_g_right` | IR | BTU/(HR.FT.F) |
+| `psi_g_bottom` | IR | BTU/(HR.FT.F) |
+| `psi_g_top` | IR | BTU/(HR.FT.F) |
+| `psi_i_left` | JZ | BTU/(HR.FT.F) |
+| `psi_i_right` | JZ | BTU/(HR.FT.F) |
+| `psi_i_bottom` | KB | BTU/(HR.FT.F) |
+| `psi_i_top` | KA | BTU/(HR.FT.F) |
 
 ### ventilators
 
@@ -360,15 +360,15 @@ Worksheet key: `WINDOWS`
 | `orientation_angle` | O |  |
 | `vertical_angle` | P |  |
 | `orientation_label` | Q |  |
-| `width` | R | M |
-| `height` | S | M |
+| `width` | R | FT |
+| `height` | S | FT |
 | `host` | T |  |
 | `glazing_id` | U |  |
 | `frame_id` | V |  |
-| `psi_i_left` | AN | W/MK |
-| `psi_i_right` | AO | W/MK |
-| `psi_i_bottom` | AQ | W/MK |
-| `psi_i_top` | AP | W/MK |
+| `psi_i_left` | AN | BTU/(HR.FT.F) |
+| `psi_i_right` | AO | BTU/(HR.FT.F) |
+| `psi_i_bottom` | AQ | BTU/(HR.FT.F) |
+| `psi_i_top` | AP | BTU/(HR.FT.F) |
 | `window_area` | AW | M2 |
 | `glazing_area` | AX | M2 |
 | `glazing_fraction` | AY |  |
@@ -448,11 +448,11 @@ Worksheet key: `ADDNL_VENT`
 | `quantity` | D |  |
 | `display_name` | E |  |
 | `vent_unit_assigned` | F |  |
-| `weighted_floor_area` | G | M2 |
-| `clear_height` | H | M |
-| `V_sup` | J | M3/HR |
-| `V_eta` | K | M3/HR |
-| `V_trans` | L | M3/HR |
+| `weighted_floor_area` | G | FT2 |
+| `clear_height` | H | FT |
+| `V_sup` | J | CFM |
+| `V_eta` | K | CFM |
+| `V_trans` | L | CFM |
 | `operating_hours` | N |  |
 | `operating_days` | O |  |
 | `holiday_days` | P |  |
