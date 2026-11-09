@@ -20,7 +20,6 @@ from typing import Any
 
 from openpyxl import load_workbook
 from openpyxl.workbook import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
 
 from phpp_tool.locators import (
     SPARSE_ROW_BREAK_THRESHOLD,
@@ -71,13 +70,14 @@ def read_phpp(
         for ws_key, ws_spec in field_map.items():
             sheet_name = resolve_sheet_name(ws_spec["sheet_name"], sheet_names)
             if sheet_name is None:
-                logger.warning("Sheet %r not found, skipping %s",
-                               ws_spec["sheet_name"], ws_key)
+                logger.warning(
+                    "Sheet %r not found, skipping %s", ws_spec["sheet_name"], ws_key
+                )
                 continue
             ws_pair: WsPair = (wb_vals[sheet_name], wb_fmls[sheet_name])
             ws_result = _read_worksheet(
-                ws_pair, wb_vals, wb_fmls, ws_spec,
-                skip_formulas=skip_formulas)
+                ws_pair, wb_vals, wb_fmls, ws_spec, skip_formulas=skip_formulas
+            )
             if ws_result:
                 result[ws_key] = ws_result
     finally:
@@ -92,38 +92,51 @@ def _read_worksheet(
     wb_vals: Workbook,
     wb_fmls: Workbook,
     ws_spec: dict[str, Any],
-    *, skip_formulas: bool = True,
+    *,
+    skip_formulas: bool = True,
 ) -> dict[str, Any]:
     """Extract all mapped values from a single worksheet."""
     ws_result: dict[str, Any] = {}
 
     if ws_spec.get("fields"):
         resolved = _read_label_anchored_fields(
-            ws_pair, ws_spec["fields"], skip_formulas=skip_formulas)
+            ws_pair, ws_spec["fields"], skip_formulas=skip_formulas
+        )
         if resolved:
             ws_result.update(resolved)
 
     if ws_spec.get("config"):
         config_resolved = _read_config(
-            ws_pair, wb_vals, wb_fmls, ws_spec["config"],
-            ws_spec.get("config_kind", {}), skip_formulas=skip_formulas)
+            ws_pair,
+            wb_vals,
+            wb_fmls,
+            ws_spec["config"],
+            ws_spec.get("config_kind", {}),
+            skip_formulas=skip_formulas,
+        )
         if config_resolved:
             ws_result["_config"] = config_resolved
 
     for sec_name, sec_spec in ws_spec.get("sections", {}).items():
         sec_result = _read_section(
-            ws_pair, wb_vals, wb_fmls, sec_spec, ws_spec.get("config", {}),
-            skip_formulas=skip_formulas)
+            ws_pair,
+            wb_vals,
+            wb_fmls,
+            sec_spec,
+            skip_formulas=skip_formulas,
+        )
         if sec_result:
             ws_result[sec_name] = sec_result
 
     has_mapped_content = bool(
-        ws_spec.get("fields") or ws_spec.get("config") or ws_spec.get("sections"))
+        ws_spec.get("fields") or ws_spec.get("config") or ws_spec.get("sections")
+    )
     if has_mapped_content and not ws_result:
         logger.warning(
             "Worksheet %r has mapped fields/sections but resolved to no "
             "data at all -- check locators and skip_formulas interaction",
-            ws_pair[0].title)
+            ws_pair[0].title,
+        )
 
     return ws_result
 
@@ -136,7 +149,9 @@ _OPTION_CODE_RE = re.compile(r"^(\w+)-")
 
 
 def _check_options(
-    field_name: str, val: Any, options: dict[str, str] | None,
+    field_name: str,
+    val: Any,
+    options: dict[str, str] | None,
     sheet_name: str,
 ) -> None:
     """Warn if a resolved value's leading code isn't a documented option.
@@ -154,12 +169,18 @@ def _check_options(
         logger.warning(
             "Field %r resolved to %r in sheet %r, which doesn't match any "
             "documented option code (%s) -- field map options may be stale",
-            field_name, val, sheet_name, ", ".join(sorted(options)),
+            field_name,
+            val,
+            sheet_name,
+            ", ".join(sorted(options)),
         )
 
 
 def _check_io(
-    field_name: str, spec: dict, ws_pair: WsPair, sheet_name: str,
+    field_name: str,
+    spec: dict,
+    ws_pair: WsPair,
+    sheet_name: str,
 ) -> None:
     """Warn if a field's declared io tag disagrees with its actual formula status.
 
@@ -171,8 +192,11 @@ def _check_io(
     if io is None:
         return
     is_formula = is_label_anchored_formula(
-        ws_pair, spec["locator_col"], spec["locator_string"],
-        spec["input_col"], spec.get("row_offset", 0),
+        ws_pair,
+        spec["locator_col"],
+        spec["locator_string"],
+        spec["input_col"],
+        spec.get("row_offset", 0),
     )
     if is_formula is None:
         return
@@ -180,19 +204,23 @@ def _check_io(
         logger.warning(
             "Field %r in sheet %r is tagged (input) but its cell contains "
             "a formula -- field map may be stale",
-            field_name, sheet_name,
+            field_name,
+            sheet_name,
         )
     elif io == "output" and not is_formula:
         logger.warning(
             "Field %r in sheet %r is tagged (output) but its cell is a "
             "literal value, not a formula -- field map may be stale",
-            field_name, sheet_name,
+            field_name,
+            sheet_name,
         )
 
 
 def _read_label_anchored_fields(
-    ws_pair: WsPair, fields: dict[str, dict],
-    *, skip_formulas: bool = True,
+    ws_pair: WsPair,
+    fields: dict[str, dict],
+    *,
+    skip_formulas: bool = True,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field_name, spec in fields.items():
@@ -216,23 +244,25 @@ def _read_label_anchored_fields(
 # Config values
 # ---------------------------------------------------------------------------
 
+
 def _read_config(
     ws_pair: WsPair,
     wb_vals: Workbook,
     wb_fmls: Workbook,
     config: dict[str, Any],
     config_kind: dict[str, str],
-    *, skip_formulas: bool = True,
+    *,
+    skip_formulas: bool = True,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in config.items():
         kind = config_kind.get(key, "literal")
         if kind == "address":
-            result[key] = resolve_absolute(ws_pair, value,
-                                           skip_formulas=skip_formulas)
+            result[key] = resolve_absolute(ws_pair, value, skip_formulas=skip_formulas)
         elif kind == "named_range":
-            result[key] = resolve_named_range(wb_vals, wb_fmls, value,
-                                              skip_formulas=skip_formulas)
+            result[key] = resolve_named_range(
+                wb_vals, wb_fmls, value, skip_formulas=skip_formulas
+            )
         else:
             result[key] = value
     return result
@@ -242,12 +272,12 @@ def _read_config(
 # Section dispatch
 # ---------------------------------------------------------------------------
 
+
 def _read_section(
     ws_pair: WsPair,
     wb_vals: Workbook,
     wb_fmls: Workbook,
     sec_spec: dict[str, Any],
-    ws_config: dict[str, Any],
     *,
     skip_formulas: bool = True,
 ) -> dict[str, Any] | list[dict[str, Any]] | None:
@@ -264,31 +294,42 @@ def _read_section(
     entry_row_start = resolve_entry_row_start(items)
     sf = skip_formulas
 
-    if has_header and has_col_fields and "block_pitch_rows" in items and "first_layer_row_offset" in items:
+    if (
+        has_header
+        and has_col_fields
+        and "block_pitch_rows" in items
+        and "first_layer_row_offset" in items
+    ):
         return _read_construction_blocks(ws_pair, sec_spec, skip_formulas=sf)
     if has_header and has_entry and has_row_fields and not has_col_fields:
         return _read_row_offset_section(ws_pair, sec_spec, skip_formulas=sf)
     if has_col_fields and has_row_fields:
-        return _read_column_row_section(ws_pair, sec_spec, entry_row_start,
-                                        skip_formulas=sf)
+        return _read_column_row_section(
+            ws_pair, sec_spec, entry_row_start, skip_formulas=sf
+        )
     if has_header and has_entry and has_col_fields:
-        return _read_block_section(ws_pair, sec_spec, entry_row_start,
-                                   skip_formulas=sf)
+        return _read_block_section(ws_pair, sec_spec, entry_row_start, skip_formulas=sf)
     if has_col_fields and not has_header:
-        return _read_static_column_section(ws_pair, sec_spec, entry_row_start,
-                                           skip_formulas=sf)
+        return _read_static_column_section(
+            ws_pair, sec_spec, entry_row_start, skip_formulas=sf
+        )
     if has_col_fields and entry_row_start is not None:
-        return _read_block_section(ws_pair, sec_spec, entry_row_start,
-                                   skip_formulas=sf)
+        return _read_block_section(ws_pair, sec_spec, entry_row_start, skip_formulas=sf)
     if has_appliance:
         return _read_appliance_section(sec_spec)
     if has_items:
-        return _read_items_section(ws_pair, wb_vals, wb_fmls, items,
-                                   sec_spec.get("items_kind", {}),
-                                   skip_formulas=sf)
+        return _read_items_section(
+            ws_pair,
+            wb_vals,
+            wb_fmls,
+            items,
+            sec_spec.get("items_kind", {}),
+            skip_formulas=sf,
+        )
     if has_fields:
-        return _read_label_anchored_fields(ws_pair, sec_spec["fields"],
-                                           skip_formulas=sf)
+        return _read_label_anchored_fields(
+            ws_pair, sec_spec["fields"], skip_formulas=sf
+        )
     if has_header and not has_entry and not has_col_fields:
         return _read_header_only(ws_pair, sec_spec)
     return None
@@ -297,6 +338,7 @@ def _read_section(
 # ---------------------------------------------------------------------------
 # Block patterns
 # ---------------------------------------------------------------------------
+
 
 def _read_block_section(
     ws_pair: WsPair,
@@ -316,17 +358,26 @@ def _read_block_section(
 
 
 _CONSTRUCTION_LAYER_FIELDS = (
-    "sec_1_description", "sec_1_conductivity",
-    "sec_2_description", "sec_2_conductivity",
-    "sec_3_description", "sec_3_conductivity",
+    "sec_1_description",
+    "sec_1_conductivity",
+    "sec_2_description",
+    "sec_2_conductivity",
+    "sec_3_description",
+    "sec_3_conductivity",
     "thickness",
 )
-_CONSTRUCTION_PERCENTAGE_FIELDS = ("sec_1_percentage", "sec_2_percentage", "sec_3_percentage")
+_CONSTRUCTION_PERCENTAGE_FIELDS = (
+    "sec_1_percentage",
+    "sec_2_percentage",
+    "sec_3_percentage",
+)
 
 
 def _read_construction_blocks(
-    ws_pair: WsPair, sec_spec: dict[str, Any],
-    *, skip_formulas: bool = True,
+    ws_pair: WsPair,
+    sec_spec: dict[str, Any],
+    *,
+    skip_formulas: bool = True,
 ) -> list[dict[str, Any]]:
     """PHPP's own opaque-construction grid ("R-Values"/"U-values" sheet):
     one ~21-row block per assembly, repeating downward from the header
@@ -350,8 +401,9 @@ def _read_construction_blocks(
 
     first_header_row = find_row_in_col(ws_vals, hdr["col"], hdr["string"])
     if first_header_row is None:
-        logger.warning("Header locator %r not found for construction blocks",
-                       hdr["string"])
+        logger.warning(
+            "Header locator %r not found for construction blocks", hdr["string"]
+        )
         return []
 
     pitch = items["block_pitch_rows"]
@@ -365,7 +417,9 @@ def _read_construction_blocks(
     block_index = 0
     while header_row <= max_row:
         name_row = header_row + items["name_row_offset"] - 1
-        display_name = cell_value(ws_pair, name_col, name_row, skip_formulas=skip_formulas)
+        display_name = cell_value(
+            ws_pair, name_col, name_row, skip_formulas=skip_formulas
+        )
         if not display_name:
             consecutive_blank += 1
             if consecutive_blank >= SPARSE_ROW_BREAK_THRESHOLD:
@@ -380,12 +434,24 @@ def _read_construction_blocks(
         block: dict[str, Any] = {
             "display_name": display_name,
             "phpp_id_num": cell_value(ws_pair, id_col, name_row, skip_formulas=False),
-            "r_si": cell_value(ws_pair, field_col(fields["r_si"]), rsi_row, skip_formulas=skip_formulas),
+            "r_si": cell_value(
+                ws_pair, field_col(fields["r_si"]), rsi_row, skip_formulas=skip_formulas
+            ),
             "interior_insulation": cell_value(
-                ws_pair, field_col(fields["interior_insulation"]), rsi_row, skip_formulas=skip_formulas),
-            "r_se": cell_value(ws_pair, field_col(fields["r_se"]), rse_row, skip_formulas=skip_formulas),
+                ws_pair,
+                field_col(fields["interior_insulation"]),
+                rsi_row,
+                skip_formulas=skip_formulas,
+            ),
+            "r_se": cell_value(
+                ws_pair, field_col(fields["r_se"]), rse_row, skip_formulas=skip_formulas
+            ),
             "u_val_supplement": cell_value(
-                ws_pair, field_col(fields["u_val_supplement"]), rse_row, skip_formulas=skip_formulas),
+                ws_pair,
+                field_col(fields["u_val_supplement"]),
+                rse_row,
+                skip_formulas=skip_formulas,
+            ),
         }
 
         layers: list[dict[str, Any]] = []
@@ -393,7 +459,9 @@ def _read_construction_blocks(
         last_layer_row = header_row + items["last_layer_row_offset"] - 1
         for row in range(first_layer_row, last_layer_row + 1):
             layer = {
-                key: cell_value(ws_pair, field_col(fields[key]), row, skip_formulas=skip_formulas)
+                key: cell_value(
+                    ws_pair, field_col(fields[key]), row, skip_formulas=skip_formulas
+                )
                 for key in _CONSTRUCTION_LAYER_FIELDS
             }
             # A real layer needs at least a first-section material name --
@@ -407,7 +475,9 @@ def _read_construction_blocks(
 
         pct_row = header_row + items["percentage_row_offset"] - 1
         for key in _CONSTRUCTION_PERCENTAGE_FIELDS:
-            block[key] = cell_value(ws_pair, field_col(fields[key]), pct_row, skip_formulas=skip_formulas)
+            block[key] = cell_value(
+                ws_pair, field_col(fields[key]), pct_row, skip_formulas=skip_formulas
+            )
 
         blocks.append(block)
         header_row += pitch
@@ -419,12 +489,15 @@ def _read_construction_blocks(
 def _shift_col(col: str, offset: int) -> str:
     """Column letter *offset* columns to the right of *col*."""
     from openpyxl.utils import get_column_letter
+
     return get_column_letter(col_to_idx(col) + offset)
 
 
 def _read_row_offset_section(
-    ws_pair: WsPair, sec_spec: dict[str, Any],
-    *, skip_formulas: bool = True,
+    ws_pair: WsPair,
+    sec_spec: dict[str, Any],
+    *,
+    skip_formulas: bool = True,
 ) -> dict[str, Any]:
     ws_vals, _ = ws_pair
     entry_loc = sec_spec["entry_locator"]
@@ -437,8 +510,8 @@ def _read_row_offset_section(
     for field_name, field_spec in sec_spec["row_fields"].items():
         offset = field_row_offset(field_spec)
         result[field_name] = resolve_row_offset(
-            ws_pair, anchor_row, input_col, offset,
-            skip_formulas=skip_formulas)
+            ws_pair, anchor_row, input_col, offset, skip_formulas=skip_formulas
+        )
     return result
 
 
@@ -446,14 +519,16 @@ def _read_column_row_section(
     ws_pair: WsPair,
     sec_spec: dict[str, Any],
     entry_row_start: int | None,
-    *, skip_formulas: bool = True,
+    *,
+    skip_formulas: bool = True,
 ) -> dict[str, Any]:
     ws_vals, _ = ws_pair
     entry_loc = sec_spec.get("entry_locator", {})
     if entry_row_start is None:
         if entry_loc:
             entry_row_start = find_row_in_col(
-                ws_vals, entry_loc["col"], entry_loc["string"])
+                ws_vals, entry_loc["col"], entry_loc["string"]
+            )
         if entry_row_start is None:
             return {}
     elif entry_loc:
@@ -467,7 +542,10 @@ def _read_column_row_section(
                 "entry_row_start=%d for entry label %r in sheet %r "
                 "disagrees with the discovered row %d -- using "
                 "entry_row_start, but the field map may be stale",
-                entry_row_start, entry_loc["string"], ws_vals.title, discovered,
+                entry_row_start,
+                entry_loc["string"],
+                ws_vals.title,
+                discovered,
             )
 
     result: dict[str, Any] = {}
@@ -477,8 +555,12 @@ def _read_column_row_section(
         for field_name, field_spec in sec_spec["row_fields"].items():
             offset = field_row_offset(field_spec)
             entity[field_name] = resolve_row_offset(
-                ws_pair, entry_row_start, col_letter, offset,
-                skip_formulas=skip_formulas)
+                ws_pair,
+                entry_row_start,
+                col_letter,
+                offset,
+                skip_formulas=skip_formulas,
+            )
         result[col_name] = entity
     return result
 
@@ -487,7 +569,8 @@ def _read_static_column_section(
     ws_pair: WsPair,
     sec_spec: dict[str, Any],
     entry_row_start: int | None,
-    *, skip_formulas: bool = True,
+    *,
+    skip_formulas: bool = True,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     ws_vals, _ = ws_pair
     items = sec_spec.get("items", {})
@@ -500,8 +583,9 @@ def _read_static_column_section(
             row_data: dict[str, Any] = {"_row": row}
             all_none = True
             for field_name, field_spec in sec_spec["column_fields"].items():
-                val = resolve_row_offset(ws_pair, row, field_col(field_spec), 0,
-                                         skip_formulas=skip_formulas)
+                val = resolve_row_offset(
+                    ws_pair, row, field_col(field_spec), 0, skip_formulas=skip_formulas
+                )
                 row_data[field_name] = val
                 if val is not None:
                     all_none = False
@@ -517,31 +601,38 @@ def _read_static_column_section(
 # Items-only sections
 # ---------------------------------------------------------------------------
 
+
 def _read_items_section(
     ws_pair: WsPair,
     wb_vals: Workbook,
     wb_fmls: Workbook,
     items: dict[str, Any],
     items_kind: dict[str, str],
-    *, skip_formulas: bool = True,
+    *,
+    skip_formulas: bool = True,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in items.items():
         if isinstance(value, dict):
             if "col" in value and "row" in value:
                 result[key] = resolve_fixed(
-                    ws_pair, row=value["row"], col=value["col"],
-                    skip_formulas=skip_formulas)
+                    ws_pair,
+                    row=value["row"],
+                    col=value["col"],
+                    skip_formulas=skip_formulas,
+                )
             else:
                 result[key] = value
         else:
             kind = items_kind.get(key, "literal")
             if kind == "address":
-                result[key] = resolve_absolute(ws_pair, value,
-                                               skip_formulas=skip_formulas)
+                result[key] = resolve_absolute(
+                    ws_pair, value, skip_formulas=skip_formulas
+                )
             elif kind == "named_range":
-                result[key] = resolve_named_range(wb_vals, wb_fmls, value,
-                                                  skip_formulas=skip_formulas)
+                result[key] = resolve_named_range(
+                    wb_vals, wb_fmls, value, skip_formulas=skip_formulas
+                )
             else:
                 result[key] = value
     return result
@@ -550,6 +641,7 @@ def _read_items_section(
 # ---------------------------------------------------------------------------
 # Appliance rows (Electricity) — stub
 # ---------------------------------------------------------------------------
+
 
 def _read_appliance_section(
     sec_spec: dict[str, Any],
@@ -573,8 +665,10 @@ def _read_appliance_section(
 # Header-only sections
 # ---------------------------------------------------------------------------
 
+
 def _read_header_only(
-    ws_pair: WsPair, sec_spec: dict[str, Any],
+    ws_pair: WsPair,
+    sec_spec: dict[str, Any],
 ) -> dict[str, Any] | None:
     ws_vals, _ = ws_pair
     header = sec_spec["header_locator"]

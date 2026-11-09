@@ -57,7 +57,8 @@ class TestFormulaProtection:
 
     def test_mixed_batch_skips_only_the_formula_cell(self):
         patched, skipped = _patch_sheet_xml(
-            _SHEET_XML, "Sheet1", [("A", 1, 99), ("C", 1, 42)])
+            _SHEET_XML, "Sheet1", [("A", 1, 99), ("C", 1, 42)]
+        )
 
         assert skipped == [("Sheet1", "A", 1)]
         assert b"<v>42</v>" in patched
@@ -95,7 +96,8 @@ class TestApplySurgicalWrites:
                 zf.writestr(name, data)
 
         skipped = apply_surgical_writes(
-            template, output,
+            template,
+            output,
             [("Sheet1", "A", 1, 999), ("Sheet1", "C", 1, "hello")],
         )
 

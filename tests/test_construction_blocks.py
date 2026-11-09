@@ -137,7 +137,11 @@ class TestWriteConstructionBlocks:
                 "r_si": "2-Wall",
                 "r_se": "1-Outdoor air",
                 "layers": [
-                    {"sec_1_description": "Gypsum", "sec_1_conductivity": 0.9, "thickness": 0.625},
+                    {
+                        "sec_1_description": "Gypsum",
+                        "sec_1_conductivity": 0.9,
+                        "thickness": 0.625,
+                    },
                 ],
                 "sec_2_percentage": 0.094,
             },
@@ -147,7 +151,9 @@ class TestWriteConstructionBlocks:
             },
         ]
         pending: list[tuple[str, str, int, object]] = []
-        count = _write_construction_blocks(ws, "R-Values", _SEC_SPEC, blocks_data, pending)
+        count = _write_construction_blocks(
+            ws, "R-Values", _SEC_SPEC, blocks_data, pending
+        )
 
         assert count == len(pending)
         assert ("R-Values", "L", 8, "Externl wall") in pending
@@ -169,13 +175,20 @@ class TestWriteConstructionBlocks:
         ws = wb.active
         ws["L7"] = "Description of building assembly"
         too_many_layers = [
-            {"sec_1_description": f"Layer {i}", "sec_1_conductivity": 1.0, "thickness": 1.0}
+            {
+                "sec_1_description": f"Layer {i}",
+                "sec_1_conductivity": 1.0,
+                "thickness": 1.0,
+            }
             for i in range(10)
         ]
         pending: list[tuple[str, str, int, object]] = []
         _write_construction_blocks(
-            ws, "R-Values", _SEC_SPEC,
-            [{"display_name": "Overstuffed", "layers": too_many_layers}], pending,
+            ws,
+            "R-Values",
+            _SEC_SPEC,
+            [{"display_name": "Overstuffed", "layers": too_many_layers}],
+            pending,
         )
         layer_rows = {w[2] for w in pending if w[1] == "L" and w[3].startswith("Layer")}
         assert len(layer_rows) == 8  # first_layer_row_offset..last_layer_row_offset

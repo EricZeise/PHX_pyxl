@@ -6,7 +6,6 @@ import json
 from collections import Counter
 from typing import Any
 
-
 FLOAT_TOLERANCE = 1e-10
 
 
@@ -29,7 +28,9 @@ def count_fields(d: dict | list) -> int:
 
 
 def diff_dicts(
-    d1: dict, d2: dict, path: str = "",
+    d1: dict,
+    d2: dict,
+    path: str = "",
 ) -> list[dict[str, Any]]:
     """Compare two dicts, returning difference records."""
     diffs: list[dict[str, Any]] = []
@@ -57,12 +58,14 @@ def _diff_lists(l1: list, l2: list, path: str) -> list[dict[str, Any]]:
     diffs: list[dict[str, Any]] = []
 
     if len(l1) != len(l2):
-        diffs.append({
-            "type": "list_len",
-            "path": path,
-            "orig": len(l1),
-            "rt": len(l2),
-        })
+        diffs.append(
+            {
+                "type": "list_len",
+                "path": path,
+                "orig": len(l1),
+                "rt": len(l2),
+            }
+        )
 
     for i in range(min(len(l1), len(l2))):
         ip = f"{path}[{i}]"
@@ -78,11 +81,7 @@ def _classify_value_diff(path: str, orig: Any, rt: Any) -> dict[str, Any]:
     """Classify a single value difference."""
     if isinstance(orig, (int, float)) and isinstance(rt, (int, float)):
         if abs(orig - rt) < FLOAT_TOLERANCE:
-            return {
-                "type": "float_rounding",
-                "path": path,
-                "orig": orig,
-                "rt": rt}
+            return {"type": "float_rounding", "path": path, "orig": orig, "rt": rt}
         return {"type": "value_diff", "path": path, "orig": orig, "rt": rt}
 
     if orig is None and rt is not None:
@@ -129,8 +128,7 @@ def compare(file1: dict, file2: dict) -> dict[str, Any]:
         elif t == "list_len":
             ll.append(d)
 
-    meaningful = len(real_value) + len(v2n) + \
-        len(n2v) + len(missing) + len(added)
+    meaningful = len(real_value) + len(v2n) + len(n2v) + len(missing) + len(added)
     cosmetic = len(fr) + len(row_diffs)
     structural = len(ll)
 
@@ -142,14 +140,8 @@ def compare(file1: dict, file2: dict) -> dict[str, Any]:
         "meaningful": meaningful,
         "cosmetic": cosmetic,
         "structural": structural,
-        "data_fidelity_pct": (
-            (1 - meaningful / total_f1) * 100
-            if total_f1 else 100.0
-        ),
-        "match_rate_pct": (
-            (1 - len(diffs) / total_f1) * 100
-            if total_f1 else 100.0
-        ),
+        "data_fidelity_pct": ((1 - meaningful / total_f1) * 100 if total_f1 else 100.0),
+        "match_rate_pct": ((1 - len(diffs) / total_f1) * 100 if total_f1 else 100.0),
         "max_float_error": max(
             (abs(d["orig"] - d["rt"]) for d in fr),
             default=0.0,
@@ -217,23 +209,20 @@ def format_report(
     lines.append("  VALUE DIFFERENCES DETAIL")
     lines.append("-" * 70)
     lines.append("")
-    lines.append(
-        f"  Row position shifts (_row metadata):    {len(row_diffs):>5}")
-    lines.append(
-        f"  Actual data value mismatches:            {len(real_value):>5}")
+    lines.append(f"  Row position shifts (_row metadata):    {len(row_diffs):>5}")
+    lines.append(f"  Actual data value mismatches:            {len(real_value):>5}")
     lines.append("")
 
     if real_value:
         by_ws = _group_by_top_key(real_value)
         lines.append("  By section:")
-        for ws in sorted(by_ws.keys()):
-            lines.append(f"    {ws}: {len(by_ws[ws])} mismatches")
+        lines.extend(f"    {ws}: {len(by_ws[ws])} mismatches" for ws in sorted(by_ws))
         lines.append("")
 
         for ws in sorted(by_ws.keys()):
             lines.append(f"  --- {ws} ---")
             for d in by_ws[ws]:
-                short = d["path"][len(ws) + 1:]
+                short = d["path"][len(ws) + 1 :]
                 ov = json.dumps(d.get("orig"))[:45]
                 rv = json.dumps(d.get("rt"))[:45]
                 lines.append(f"    {short:50s} {ov:>45s}  →  {rv}")
@@ -243,17 +232,15 @@ def format_report(
     v2n = results["values_lost"]
     if v2n:
         lines.append("-" * 70)
-        lines.append(
-            f"  VALUES LOST (File 1 had value, File 2 has None): {len(v2n)}")
+        lines.append(f"  VALUES LOST (File 1 had value, File 2 has None): {len(v2n)}")
         lines.append("-" * 70)
         lines.append("")
         by_ws = _group_by_top_key(v2n)
         for ws in sorted(by_ws.keys()):
             lines.append(f"  --- {ws}: {len(by_ws[ws])} lost ---")
             for d in by_ws[ws][:10]:
-                short = d["path"][len(ws) + 1:]
-                lines.append(
-                    f"    {short:50s} was: {json.dumps(d['orig'])[:50]}")
+                short = d["path"][len(ws) + 1 :]
+                lines.append(f"    {short:50s} was: {json.dumps(d['orig'])[:50]}")
             if len(by_ws[ws]) > 10:
                 lines.append(f"    ... and {len(by_ws[ws]) - 10} more")
             lines.append("")
@@ -262,17 +249,15 @@ def format_report(
     n2v = results["values_gained"]
     if n2v:
         lines.append("-" * 70)
-        lines.append(
-            f"  VALUES GAINED (File 1 had None, File 2 has value): {len(n2v)}")
+        lines.append(f"  VALUES GAINED (File 1 had None, File 2 has value): {len(n2v)}")
         lines.append("-" * 70)
         lines.append("")
         by_ws = _group_by_top_key(n2v)
         for ws in sorted(by_ws.keys()):
             lines.append(f"  --- {ws}: {len(by_ws[ws])} gained ---")
             for d in by_ws[ws][:10]:
-                short = d["path"][len(ws) + 1:]
-                lines.append(
-                    f"    {short:50s} now: {json.dumps(d['rt'])[:50]}")
+                short = d["path"][len(ws) + 1 :]
+                lines.append(f"    {short:50s} now: {json.dumps(d['rt'])[:50]}")
             if len(by_ws[ws]) > 10:
                 lines.append(f"    ... and {len(by_ws[ws]) - 10} more")
             lines.append("")
@@ -288,7 +273,8 @@ def format_report(
             delta = d["rt"] - d["orig"]
             lines.append(
                 f"  {d['path']:50s} {d['orig']:>4} rows"
-                f" → {d['rt']:>4} rows  (delta: {delta:+d})")
+                f" → {d['rt']:>4} rows  (delta: {delta:+d})"
+            )
         lines.append("")
 
     # Missing keys
@@ -298,8 +284,7 @@ def format_report(
         lines.append(f"  KEYS IN FILE 1 BUT MISSING IN FILE 2: {len(mk)}")
         lines.append("-" * 70)
         lines.append("")
-        for d in mk[:30]:
-            lines.append(f"  {d['path']}")
+        lines.extend(f"  {d['path']}" for d in mk[:30])
         if len(mk) > 30:
             lines.append(f"  ... and {len(mk) - 30} more")
         lines.append("")
@@ -311,8 +296,7 @@ def format_report(
         lines.append(f"  KEYS IN FILE 2 BUT NOT IN FILE 1: {len(ak)}")
         lines.append("-" * 70)
         lines.append("")
-        for d in ak[:30]:
-            lines.append(f"  {d['path']}")
+        lines.extend(f"  {d['path']}" for d in ak[:30])
         if len(ak) > 30:
             lines.append(f"  ... and {len(ak) - 30} more")
         lines.append("")
@@ -324,8 +308,8 @@ def format_report(
         lines.append(f"  FLOAT ROUNDING: {len(fr)} instances")
         lines.append(f"  Maximum error: {results['max_float_error']:.2e}")
         lines.append(
-            "  These are insignificant floating-point"
-            " representation differences.")
+            "  These are insignificant floating-point representation differences."
+        )
         lines.append("-" * 70)
         lines.append("")
 

@@ -36,6 +36,7 @@ WsPair = tuple[Worksheet, Worksheet]
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def norm(value: Any) -> str:
     """Normalize a label for comparison: NFKC, NBSP→space, strip, casefold."""
     if value is None:
@@ -111,9 +112,11 @@ def field_row_offset(spec: dict) -> int:
 
 def resolve_entry_row_start(items: dict) -> int | None:
     """Look up a block's entry-start row from any of its recognized key aliases."""
-    return (items.get("entry_row_start")
-            or items.get("entry_start_row")
-            or items.get("start_row"))
+    return (
+        items.get("entry_row_start")
+        or items.get("entry_start_row")
+        or items.get("start_row")
+    )
 
 
 def _is_formula(ws_fmls: Worksheet, col_idx: int, row: int) -> bool:
@@ -123,7 +126,11 @@ def _is_formula(ws_fmls: Worksheet, col_idx: int, row: int) -> bool:
 
 
 def cell_value(
-    ws_pair: WsPair, col: str, row: int, *, skip_formulas: bool = False,
+    ws_pair: WsPair,
+    col: str,
+    row: int,
+    *,
+    skip_formulas: bool = False,
 ) -> Any:
     """Read a single cell by column letter(s) and row number.
 
@@ -138,8 +145,12 @@ def cell_value(
 
 
 def find_row_in_col(
-    ws_vals: Worksheet, col: str, needle: str, *,
-    contains: bool = True, start_from: int = 1,
+    ws_vals: Worksheet,
+    col: str,
+    needle: str,
+    *,
+    contains: bool = True,
+    start_from: int = 1,
 ) -> int | None:
     """Return the first row where ``col``'s cell text matches *needle*.
 
@@ -158,9 +169,8 @@ def find_row_in_col(
         if contains:
             if needle_n in cell_n:
                 return row
-        else:
-            if cell_n == needle_n:
-                return row
+        elif cell_n == needle_n:
+            return row
     return None
 
 
@@ -181,7 +191,9 @@ def is_header_row(row_data: dict[str, Any]) -> bool:
 
 
 def is_entry_row_header(
-    ws_vals: Worksheet, row: int, column_fields: dict[str, dict],
+    ws_vals: Worksheet,
+    row: int,
+    column_fields: dict[str, dict],
 ) -> bool:
     """Check if the entry locator row is a column header, not a data row."""
     row_data = {}
@@ -195,8 +207,12 @@ def is_entry_row_header(
 # Strategy 1: Label-anchored relative
 # ---------------------------------------------------------------------------
 
+
 def is_label_anchored_formula(
-    ws_pair: WsPair, locator_col: str, locator_string: str, input_col: str,
+    ws_pair: WsPair,
+    locator_col: str,
+    locator_string: str,
+    input_col: str,
     row_offset: int = 0,
 ) -> bool | None:
     """Return whether a label-anchored field's target cell is a formula.
@@ -227,11 +243,12 @@ def resolve_label_anchored(
     if row is None:
         logger.warning(
             "Label %r not found in column %s of sheet %r",
-            locator_string, locator_col, ws_vals.title,
+            locator_string,
+            locator_col,
+            ws_vals.title,
         )
         return None
-    return cell_value(ws_pair, input_col, row + row_offset,
-                      skip_formulas=skip_formulas)
+    return cell_value(ws_pair, input_col, row + row_offset, skip_formulas=skip_formulas)
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +298,10 @@ def resolve_block(
         if hdr_row is None:
             return None, False
         start_row_found = find_row_in_col(
-            ws_vals, entry_col, entry_string, start_from=hdr_row,
+            ws_vals,
+            entry_col,
+            entry_string,
+            start_from=hdr_row,
         )
         if start_row_found is None:
             return None, True
@@ -302,7 +322,10 @@ def resolve_block(
                     "entry_row_start=%d for entry label %r in sheet %r "
                     "disagrees with the discovered row %d -- using "
                     "entry_row_start, but the field map may be stale",
-                    entry_row_start, entry_string, ws_vals.title, discovered,
+                    entry_row_start,
+                    entry_string,
+                    ws_vals.title,
+                    discovered,
                 )
     else:
         if not entry_string:
@@ -312,7 +335,8 @@ def resolve_block(
             if not header_found:
                 logger.warning(
                     "Block header %r not found in column %s",
-                    header_locator["string"], header_locator["col"],
+                    header_locator["string"],
+                    header_locator["col"],
                 )
             return []
         start_row = discovered
@@ -322,8 +346,7 @@ def resolve_block(
         return []
 
     field_names = list(column_fields.keys())
-    field_col_idxs = [col_to_idx(field_col(column_fields[f]))
-                      for f in field_names]
+    field_col_idxs = [col_to_idx(field_col(column_fields[f])) for f in field_names]
     entry_col_idx = col_to_idx(entry_col)
 
     end_marker_n = norm(end_marker)
@@ -350,7 +373,8 @@ def resolve_block(
         if marker_val and entry_cell.font and entry_cell.font.bold:
             logger.debug(
                 "Stopping block scan at row %d in sheet %r -- entry "
-                "column is bold, signaling a new section", row_num,
+                "column is bold, signaling a new section",
+                row_num,
                 ws_vals.title,
             )
             break
@@ -380,13 +404,11 @@ def resolve_block(
             continue
 
         if is_header_row(raw_data):
-            logger.debug("Skipping header row %d in sheet %r",
-                         row_num, ws_vals.title)
+            logger.debug("Skipping header row %d in sheet %r", row_num, ws_vals.title)
             consecutive_sparse = 0
             continue
 
-        non_row = [v for k, v in raw_data.items()
-                   if k != "_row" and v is not None]
+        non_row = [v for k, v in raw_data.items() if k != "_row" and v is not None]
         has_string = any(isinstance(v, str) for v in non_row)
         if not has_string and len(non_row) <= max(n_fields // 3, 1):
             consecutive_sparse += 1
@@ -408,7 +430,10 @@ _NOT_FOUND = object()
 
 
 def _resolve_si_mirror_passthrough(
-    wb_vals, wb_fmls, title: str, coord: str,
+    wb_vals,
+    wb_fmls,
+    title: str,
+    coord: str,
 ) -> Any:
     """Fall back to the base-tab counterpart of a "<Name> SI" formula cell.
 
@@ -433,7 +458,11 @@ def _resolve_si_mirror_passthrough(
 
 
 def resolve_named_range(
-    wb_vals, wb_fmls, name: str, *, skip_formulas: bool = False,
+    wb_vals,
+    wb_fmls,
+    name: str,
+    *,
+    skip_formulas: bool = False,
 ) -> Any:
     """Resolve a German Excel defined name to its value.
 
@@ -445,9 +474,9 @@ def resolve_named_range(
         logger.warning("Named range %r not found in workbook", name)
         return None
 
-    for title, coord in defn.destinations:
+    for title, destination in defn.destinations:
         ws_v = wb_vals[title]
-        cell_v = ws_v[coord]
+        cell_v = ws_v[destination]
         if hasattr(cell_v, "__iter__") and not isinstance(cell_v, str):
             # Multi-cell destination -- PHPP defines several device-type-
             # name ranges broader than the single value they hold (e.g.
@@ -464,7 +493,8 @@ def resolve_named_range(
             fval = cell_f.value
             if isinstance(fval, str) and fval.startswith("="):
                 base_value = _resolve_si_mirror_passthrough(
-                    wb_vals, wb_fmls, title, coord)
+                    wb_vals, wb_fmls, title, coord
+                )
                 if base_value is not _NOT_FOUND:
                     return base_value
                 return None
@@ -477,8 +507,12 @@ def resolve_named_range(
 # Strategy 4: Absolute address
 # ---------------------------------------------------------------------------
 
+
 def resolve_absolute(
-    ws_pair: WsPair, address: str, *, skip_formulas: bool = False,
+    ws_pair: WsPair,
+    address: str,
+    *,
+    skip_formulas: bool = False,
 ) -> Any:
     """Return the value at a fixed cell reference like 'C11'."""
     col, row = parse_cell_ref(address)
@@ -489,6 +523,7 @@ def resolve_absolute(
 # Strategy 5: Column + row-offset within a block
 # ---------------------------------------------------------------------------
 
+
 def resolve_row_offset(
     ws_pair: WsPair,
     anchor_row: int,
@@ -498,16 +533,22 @@ def resolve_row_offset(
     skip_formulas: bool = False,
 ) -> Any:
     """Return value at *col*, *anchor_row* + *row_offset*."""
-    return cell_value(ws_pair, col, anchor_row + row_offset,
-                      skip_formulas=skip_formulas)
+    return cell_value(
+        ws_pair, col, anchor_row + row_offset, skip_formulas=skip_formulas
+    )
 
 
 # ---------------------------------------------------------------------------
 # Strategy 6: Fixed result rows/cols
 # ---------------------------------------------------------------------------
 
+
 def resolve_fixed(
-    ws_pair: WsPair, *, row: int, col: str, skip_formulas: bool = False,
+    ws_pair: WsPair,
+    *,
+    row: int,
+    col: str,
+    skip_formulas: bool = False,
 ) -> Any:
     """Read a fixed result location (typically formula outputs)."""
     return cell_value(ws_pair, col, row, skip_formulas=skip_formulas)

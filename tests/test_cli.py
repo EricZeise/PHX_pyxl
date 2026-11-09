@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 from openpyxl import Workbook, load_workbook
 
@@ -83,11 +82,17 @@ class TestRoundTrip:
         runner = CliRunner()
 
         # --- Read filled workbook → JSON ---
-        result = runner.invoke(main, [
-            "read", str(filled_path),
-            "-o", str(json_path),
-            "--field-map", str(map_path),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "read",
+                str(filled_path),
+                "-o",
+                str(json_path),
+                "--field-map",
+                str(map_path),
+            ],
+        )
         assert result.exit_code == 0, result.output
         assert "Written to" in result.output
 
@@ -97,17 +102,25 @@ class TestRoundTrip:
         assert data["VERIFICATION"]["num_of_units"] == 1
 
         from phpp_tool.models import BuildingRecord
+
         record = BuildingRecord.model_validate(data)
         assert record.VERIFICATION is not None
 
         # --- Write JSON → blank template ---
         template_path = _make_blank_template(tmp_path)
         out_path = tmp_path / "populated.xlsx"
-        result = runner.invoke(main, [
-            "write", str(json_path), str(template_path),
-            "-o", str(out_path),
-            "--field-map", str(map_path),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "write",
+                str(json_path),
+                str(template_path),
+                "-o",
+                str(out_path),
+                "--field-map",
+                str(map_path),
+            ],
+        )
         assert result.exit_code == 0, result.output
         assert "Written to" in result.output
 
@@ -119,20 +132,29 @@ class TestRoundTrip:
 class TestReadErrors:
     def test_read_missing_workbook(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(main, [
-            "read", str(tmp_path / "nonexistent.xlsx"),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "read",
+                str(tmp_path / "nonexistent.xlsx"),
+            ],
+        )
         assert result.exit_code != 0
 
 
 class TestWriteErrors:
     def test_write_missing_record(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(main, [
-            "write", str(tmp_path / "missing.json"),
-            str(tmp_path / "template.xlsx"),
-            "-o", str(tmp_path / "out.xlsx"),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "write",
+                str(tmp_path / "missing.json"),
+                str(tmp_path / "template.xlsx"),
+                "-o",
+                str(tmp_path / "out.xlsx"),
+            ],
+        )
         assert result.exit_code != 0
 
 
@@ -141,9 +163,14 @@ class TestInspectMapCommand:
         map_path = _make_mini_map(tmp_path)
 
         runner = CliRunner()
-        result = runner.invoke(main, [
-            "inspect-map", "--field-map", str(map_path),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "inspect-map",
+                "--field-map",
+                str(map_path),
+            ],
+        )
         assert result.exit_code == 0, result.output
         assert "VERIFICATION" in result.output
         assert "3 fields" in result.output

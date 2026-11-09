@@ -18,8 +18,89 @@ dependencies = [
 dev = ["pytest>=7.0"]
 excel = ["xlwings>=0.31"]
 
+[dependency-groups]
+# Developer tools; `uv sync` installs them (the tests need pytest, the review gate the rest).
+dev = [
+    "pytest>=7.0",
+    "lxml-stubs>=0.5",  # type information for lxml (a compiled module the checker cannot read)
+    "xlwings>=0.31",  # scripts/verify_excel.py (needs Excel to run; installed so the checkers can see it)
+    "ruff==0.17.4",
+    "isort==9.0.2",
+    "ty==0.0.99",
+    "coverage==7.17.2; python_full_version >= '3.11'",  # (coverage 7.17 needs Python 3.11; the library supports 3.10)
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
 [project.scripts]
 phpp-tool = "phpp_tool.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# ----------------------------------------------------------------------------------------------------------
+# Developer tools: PH-Demonstrator's Step 1 review gate (see its CodeReview.md), at this library's minimum
+# supported Python (3.10) and its own line length.
+# ----------------------------------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+extend-exclude = ["records", "Data"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, bugbear, pyupgrade, comprehensions, misc, Pylint warnings / errors.
+# Step 1 families, plus the Step 2 families promoted 2026-11-09: simplify, performance, refurb, Ruff-specific, unused
+# arguments, security smells, stray prints, naming, blind `except`. `C90` / `PLR` (complexity and design limits)
+# stay report-only (scripts/check_ratchet.py).
+select = [
+    "E", "W", "F", "B", "UP", "C4", "PIE", "PLW", "PLE",
+    "SIM", "PERF", "FURB", "RUF", "ARG", "S", "T20", "N", "BLE",
+]
+ignore = [
+    "E501",    # long lines are the formatter's concern (docstrings and the odd long string)
+    "PLW0603", # `global`: deliberate module state
+    "S101",    # assert: the test scripts' check
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts run directly and put src/ on sys.path before importing the package.
+"scripts/**" = ["E402", "S603", "T20"]  # (they print their results and run fixed commands)
+"tests/**" = ["ARG", "S603", "T20"]
+"src/phpp_tool/cli.py" = ["T20"]  # the command-line interface prints
+
+[tool.isort]
+profile = "black"
+line_length = 88
+py_version = 310
+known_first_party = ["phpp_tool"]
+skip_glob = ["records/*", "Data/*"]
+
+[tool.ty.environment]
+python-version = "3.10"
+
+[[tool.ty.overrides]]
+# The tests read Optional sections of the pydantic record directly and probe extra fields; they are checked by
+# running them, so the Optional / duck-typing findings are relaxed there. The library code stays strict.
+include = ["tests/**"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+not-subscriptable = "ignore"
+
+[tool.ty.src]
+include = ["src", "tests", "scripts"]
+
+# Coverage of the library, measured over the pytest run (`python scripts/run_with_coverage.py` compares the total with
+# scripts/coverage_baseline.json).
+[tool.coverage.run]
+source = ["phpp_tool", "compare_json"]
+branch = true
+parallel = true
+patch = ["subprocess"]
+
+[tool.coverage.report]
+skip_empty = true

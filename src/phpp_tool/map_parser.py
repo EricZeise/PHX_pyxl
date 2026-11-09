@@ -56,6 +56,7 @@ def parse_field_map(path: str | Path) -> dict[str, Any]:
 # Structure splitting
 # ---------------------------------------------------------------------------
 
+
 def _split_on_heading(text: str, level: int) -> list[tuple[str, str]]:
     """Split *text* at markdown headings of *level* (2 = ``##``, 3 = ``###``).
 
@@ -73,6 +74,7 @@ def _split_on_heading(text: str, level: int) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 # Worksheet parsing
 # ---------------------------------------------------------------------------
+
 
 def _parse_worksheet(heading: str, body: str) -> dict[str, Any] | None:
     key_match = re.search(r"Worksheet key:\s*`(\w+)`", body)
@@ -105,6 +107,7 @@ def _parse_worksheet(heading: str, body: str) -> dict[str, Any] | None:
 # Section parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_section(body: str) -> dict[str, Any]:
     """Parse an H3 subsection body into a structured dict."""
     locators = _extract_locators(body)
@@ -122,9 +125,7 @@ def _parse_section(body: str) -> dict[str, Any]:
             label_fields.update(table["fields"])
         elif kind == "column":
             column_fields.update(table["fields"])
-        elif kind == "row":
-            row_fields.update(table["fields"])
-        elif kind == "row_offset":
+        elif kind in ("row", "row_offset"):
             row_fields.update(table["fields"])
         elif kind == "appliance":
             appliance_rows.update(table["fields"])
@@ -167,9 +168,7 @@ def _extract_tables(text: str) -> list[dict[str, Any]]:
                 headers = _split_table_line(line)
                 num_cols = len(headers)
                 norm_h = [h.lower().replace("`", "").strip() for h in headers]
-                is_label = any(
-                    "locator_string" in h or h == "label" for h in norm_h
-                )
+                is_label = any("locator_string" in h or h == "label" for h in norm_h)
                 data_rows: list[list[str]] = []
                 j = i + 2
                 while j < len(lines):
@@ -187,7 +186,8 @@ def _extract_tables(text: str) -> list[dict[str, Any]]:
 
 
 def _split_table_line(
-    line: str, expected_cols: int | None = None,
+    line: str,
+    expected_cols: int | None = None,
 ) -> list[str]:
     """Split a markdown table row on ``|``."""
     parts = line.split("|")
@@ -198,14 +198,12 @@ def _split_table_line(
     cells = [p.strip() for p in parts]
 
     if expected_cols is not None and len(cells) > expected_cols:
-        overflow = " | ".join(cells[expected_cols - 1:])
-        cells = cells[: expected_cols - 1] + [overflow]
+        overflow = " | ".join(cells[expected_cols - 1 :])
+        cells = [*cells[: expected_cols - 1], overflow]
     return cells
 
 
-def _classify_table(
-    headers: list[str], rows: list[list[str]]
-) -> dict[str, Any]:
+def _classify_table(headers: list[str], rows: list[list[str]]) -> dict[str, Any]:
     """Classify a table by its headers and parse rows accordingly."""
     norm = [h.lower().replace("`", "").strip() for h in headers]
 
@@ -237,6 +235,7 @@ def _classify_table(
 
 
 # --- Label-anchored table (Strategy 1) ---
+
 
 def _parse_label_table(rows: list[list[str]]) -> dict[str, Any]:
     fields: dict[str, Any] = {}
@@ -296,13 +295,12 @@ def _parse_label_row(cells: list[str]) -> dict[str, Any] | None:
             continue
 
         if state == "unit":
-            unit = stripped if stripped else None
+            unit = stripped or None
             state = "options"
             continue
 
-        if state == "options":
-            if stripped:
-                options_parts.append(cell)
+        if state == "options" and stripped:
+            options_parts.append(cell)
 
     if field_key is None:
         return None
@@ -322,9 +320,8 @@ def _parse_label_row(cells: list[str]) -> dict[str, Any] | None:
 
 # --- Column field table ---
 
-def _parse_column_table(
-    headers: list[str], rows: list[list[str]]
-) -> dict[str, Any]:
+
+def _parse_column_table(headers: list[str], rows: list[list[str]]) -> dict[str, Any]:
     norm = [h.lower().strip() for h in headers]
     col_idx = _find_header(norm, "column")
     unit_idx = _find_header(norm, "unit")
@@ -338,16 +335,15 @@ def _parse_column_table(
         entry: dict[str, Any] = {"column": _cell(cells, col_idx)}
         if unit_idx is not None:
             u = _cell(cells, unit_idx)
-            entry["unit"] = u if u else None
+            entry["unit"] = u or None
         fields[name] = entry
     return {"kind": "column", "fields": fields}
 
 
 # --- Row field table ---
 
-def _parse_row_table(
-    headers: list[str], rows: list[list[str]]
-) -> dict[str, Any]:
+
+def _parse_row_table(headers: list[str], rows: list[list[str]]) -> dict[str, Any]:
     norm = [h.lower().strip() for h in headers]
     row_idx = _find_header(norm, "row")
     unit_idx = _find_header(norm, "unit")
@@ -362,20 +358,19 @@ def _parse_row_table(
         entry: dict[str, Any] = {"row": _coerce(row_val)}
         if unit_idx is not None:
             u = _cell(cells, unit_idx)
-            entry["unit"] = u if u else None
+            entry["unit"] = u or None
         fields[name] = entry
     return {"kind": "row", "fields": fields}
 
 
 # --- Row-offset field table ---
 
+
 def _parse_row_offset_table(
     headers: list[str], rows: list[list[str]]
 ) -> dict[str, Any]:
     norm = [h.lower().strip() for h in headers]
-    offset_idx = next(
-        i for i, h in enumerate(norm) if "row offset" in h
-    )
+    offset_idx = next(i for i, h in enumerate(norm) if "row offset" in h)
     unit_idx = _find_header(norm, "unit")
     field_idx = _find_header(norm, "field")
 
@@ -388,16 +383,15 @@ def _parse_row_offset_table(
         entry: dict[str, Any] = {"row_offset": _coerce(offset_val)}
         if unit_idx is not None:
             u = _cell(cells, unit_idx)
-            entry["unit"] = u if u else None
+            entry["unit"] = u or None
         fields[name] = entry
     return {"kind": "row_offset", "fields": fields}
 
 
 # --- Appliance rows table (Electricity input_rows) ---
 
-def _parse_appliance_table(
-    headers: list[str], rows: list[list[str]]
-) -> dict[str, Any]:
+
+def _parse_appliance_table(headers: list[str], rows: list[list[str]]) -> dict[str, Any]:
     norm = [h.lower().strip() for h in headers]
     app_idx = _find_header(norm, "appliance")
     data_idx = _find_header(norm, "data row")
@@ -482,10 +476,8 @@ def _extract_items(text: str) -> tuple[dict[str, Any], dict[str, str]]:
             entry["unit"] = m.group(4)
         items[m.group(1)] = entry
 
-    col_row_spans = {(m.start(), m.end())
-                     for m in _COL_ROW_PATTERN.finditer(text)}
-    locator_spans = {(m.start(), m.end())
-                     for m in _LOCATOR_PATTERN.finditer(text)}
+    col_row_spans = {(m.start(), m.end()) for m in _COL_ROW_PATTERN.finditer(text)}
+    locator_spans = {(m.start(), m.end()) for m in _LOCATOR_PATTERN.finditer(text)}
     skip_spans = col_row_spans | locator_spans
 
     for m in _BULLET_ITEM.finditer(text):
@@ -510,17 +502,24 @@ def _extract_items(text: str) -> tuple[dict[str, Any], dict[str, str]]:
                 logger.warning(
                     "Field map entry `%s` is tagged (literal) but value "
                     "%r looks like a %s -- check this wasn't a mistake",
-                    key, value,
+                    key,
+                    value,
                     "cell address" if looks_address else "named range",
                 )
             elif tag == "address" and not looks_address:
                 logger.warning(
                     "Field map entry `%s` is tagged (address) but value "
-                    "%r doesn't look like a cell reference", key, value)
+                    "%r doesn't look like a cell reference",
+                    key,
+                    value,
+                )
             elif tag == "named_range" and not looks_named_range:
                 logger.warning(
                     "Field map entry `%s` is tagged (named_range) but "
-                    "value %r doesn't look like a named range", key, value)
+                    "value %r doesn't look like a named range",
+                    key,
+                    value,
+                )
 
     return items, kinds
 
@@ -533,6 +532,7 @@ def _extract_config(text: str) -> tuple[dict[str, Any], dict[str, str]]:
 # ---------------------------------------------------------------------------
 # Label-anchored field extraction (top-level tables)
 # ---------------------------------------------------------------------------
+
 
 def _extract_label_anchored_fields(text: str) -> dict[str, Any]:
     """Parse label-anchored tables found in the top-level worksheet body."""
@@ -547,13 +547,14 @@ def _extract_label_anchored_fields(text: str) -> dict[str, Any]:
 # Options parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_options(text: str) -> dict[str, str]:
     """Parse an options string like ```1`: val1; `2`: val2`` into a dict."""
     opts: dict[str, str] = {}
     if not text:
         return opts
-    for part in text.split(";"):
-        part = part.strip()
+    for raw_part in text.split(";"):
+        part = raw_part.strip()
         if not part:
             continue
         m = re.match(r"`?(\w+)`?\s*:\s*(.+)", part)
@@ -565,6 +566,7 @@ def _parse_options(text: str) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _find_header(norm_headers: list[str], keyword: str) -> int | None:
     for i, h in enumerate(norm_headers):

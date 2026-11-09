@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import logging
 import re
-import shutil
 import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 from lxml import etree
+
+from phpp_tool.atomic import atomic_copy, atomic_write_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def _apply_surgical(
 ) -> set[SkippedRef]:
     """Copy template and apply cell-level XML edits to specific sheets."""
     if not writes:
-        shutil.copy2(template_path, output_path)
+        atomic_copy(template_path, output_path)
         return set()
 
     sheet_to_zip_path = _build_sheet_map(template_path)
@@ -79,7 +80,8 @@ def _apply_surgical(
                 continue
             original_xml = zf_in.read(zip_path)
             modified_xml, sheet_skipped = _patch_sheet_xml(
-                original_xml, target_sheet, cell_writes)
+                original_xml, target_sheet, cell_writes
+            )
             modified_zip_paths[zip_path] = modified_xml
             skipped.update(sheet_skipped)
 
@@ -209,7 +211,9 @@ def _patch_sheet_xml(
                 "Refusing to overwrite formula cell %r!%s with %r -- "
                 "the field map likely resolved a row range past its "
                 "intended block, skipping this write",
-                sheet_name, ref, value,
+                sheet_name,
+                ref,
+                value,
             )
             skipped.append((sheet_name, col_letter, row_num))
             continue
@@ -226,8 +230,9 @@ def _patch_sheet_xml(
     if has_crlf:
         new_sd = new_sd.replace("\n", "\r\n")
 
-    patched = (original_text[:sd_open_pos] + new_sd +
-               original_text[sd_end_pos:]).encode("UTF-8")
+    patched = (
+        original_text[:sd_open_pos] + new_sd + original_text[sd_end_pos:]
+    ).encode("UTF-8")
     return patched, skipped
 
 
@@ -301,12 +306,14 @@ def _rebuild_zip(
     Unmodified entries are copied as-is to preserve fidelity.
     """
     buf = BytesIO()
-    with zipfile.ZipFile(source_path, "r") as zf_in:
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf_out:
-            for item in zf_in.infolist():
-                if item.filename in modified:
-                    zf_out.writestr(item, modified[item.filename])
-                else:
-                    zf_out.writestr(item, zf_in.read(item.filename))
+    with (
+        zipfile.ZipFile(source_path, "r") as zf_in,
+        zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf_out,
+    ):
+        for item in zf_in.infolist():
+            if item.filename in modified:
+                zf_out.writestr(item, modified[item.filename])
+            else:
+                zf_out.writestr(item, zf_in.read(item.filename))
 
-    output_path.write_bytes(buf.getvalue())
+    atomic_write_bytes(output_path, buf.getvalue())

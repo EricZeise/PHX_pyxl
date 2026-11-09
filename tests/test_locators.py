@@ -38,18 +38,25 @@ class TestResolveBlockBoldStop:
     def test_stops_at_bold_totals_row_instead_of_reading_past_it(self):
         wb = _build_sheet(
             cells={
-                "C12": "Room A", "D12": 100,
-                "C13": "Room B", "D13": 200,
-                "C14": "Total floor area", "D14": 300,
+                "C12": "Room A",
+                "D12": 100,
+                "C13": "Room B",
+                "D13": 200,
+                "C14": "Total floor area",
+                "D14": 300,
                 # An unrelated table below that reuses the same columns --
                 # must never be reached once the bold row above is hit.
-                "C15": "2- Laptop (standard)", "D15": 7,
+                "C15": "2- Laptop (standard)",
+                "D15": 7,
             },
             bold_rows={14},
         )
         ws = wb.active
         rows = resolve_block(
-            (ws, ws), _HEADER_LOCATOR, _ENTRY_LOCATOR, _COLUMN_FIELDS,
+            (ws, ws),
+            _HEADER_LOCATOR,
+            _ENTRY_LOCATOR,
+            _COLUMN_FIELDS,
             entry_row_start=12,
         )
 
@@ -60,15 +67,21 @@ class TestResolveBlockBoldStop:
     def test_non_bold_rows_are_unaffected(self):
         wb = _build_sheet(
             cells={
-                "C12": "Room A", "D12": 100,
-                "C13": "Room B", "D13": 200,
-                "C14": "Room C", "D14": 300,
+                "C12": "Room A",
+                "D12": 100,
+                "C13": "Room B",
+                "D13": 200,
+                "C14": "Room C",
+                "D14": 300,
             },
             bold_rows=set(),
         )
         ws = wb.active
         rows = resolve_block(
-            (ws, ws), _HEADER_LOCATOR, _ENTRY_LOCATOR, _COLUMN_FIELDS,
+            (ws, ws),
+            _HEADER_LOCATOR,
+            _ENTRY_LOCATOR,
+            _COLUMN_FIELDS,
             entry_row_start=12,
         )
 
@@ -79,14 +92,19 @@ class TestResolveBlockBoldStop:
         # only a bold cell that actually carries content is a section title.
         wb = _build_sheet(
             cells={
-                "C12": "Room A", "D12": 100,
-                "C13": "Room B", "D13": 200,
+                "C12": "Room A",
+                "D12": 100,
+                "C13": "Room B",
+                "D13": 200,
             },
             bold_rows={14},
         )
         ws = wb.active
         rows = resolve_block(
-            (ws, ws), _HEADER_LOCATOR, _ENTRY_LOCATOR, _COLUMN_FIELDS,
+            (ws, ws),
+            _HEADER_LOCATOR,
+            _ENTRY_LOCATOR,
+            _COLUMN_FIELDS,
             entry_row_start=12,
         )
 

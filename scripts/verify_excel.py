@@ -144,8 +144,7 @@ def _compare_deep(
                         matched += 1
                     else:
                         mismatched += 1
-                        details.append(
-                            f"  {item_key}: original={ov!r}, written={wv!r}")
+                        details.append(f"  {item_key}: original={ov!r}, written={wv!r}")
         else:
             if orig_val is None and written_val is None:
                 continue
@@ -155,20 +154,22 @@ def _compare_deep(
             else:
                 mismatched += 1
                 details.append(
-                    f"  {full_key}: original={orig_val!r},"
-                    f" written={written_val!r}")
+                    f"  {full_key}: original={orig_val!r}, written={written_val!r}"
+                )
 
     return checked, matched, mismatched, details
 
 
 def verify_excel(
-    source_path: Path, written_path: Path, out_dir: Path,
+    source_path: Path,
+    written_path: Path,
+    out_dir: Path,
 ) -> dict:
     """Compare ALL mapped cells between two Excel-saved files."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'=' * 60}")
-    print(f"  POST-EXCEL VERIFICATION (pure openpyxl)")
+    print("  POST-EXCEL VERIFICATION (pure openpyxl)")
     print(f"  Source:  {source_path.name}")
     print(f"  Written: {written_path.name}")
     print(f"{'=' * 60}")
@@ -183,49 +184,51 @@ def verify_excel(
     orig_all = read_phpp(str(source_path), FIELD_MAP, skip_formulas=False)
     t_read_orig = time.time() - t0
     total_o, non_none_o = _count_values(orig_all)
-    print(f"      {len(orig_all)} worksheets,"
-          f" {non_none_o} non-None / {total_o} total values,"
-          f" {t_read_orig:.1f}s")
+    print(
+        f"      {len(orig_all)} worksheets,"
+        f" {non_none_o} non-None / {total_o} total values,"
+        f" {t_read_orig:.1f}s"
+    )
 
     print(f"\n      Reading {written_path.name} — all cells ...")
     t0 = time.time()
     written_all = read_phpp(str(written_path), FIELD_MAP, skip_formulas=False)
     t_read_written = time.time() - t0
     total_w, non_none_w = _count_values(written_all)
-    print(f"      {len(written_all)} worksheets,"
-          f" {non_none_w} non-None / {total_w} total values,"
-          f" {t_read_written:.1f}s")
+    print(
+        f"      {len(written_all)} worksheets,"
+        f" {non_none_w} non-None / {total_w} total values,"
+        f" {t_read_written:.1f}s"
+    )
 
     # Save full reads as JSON
     json_orig = out_dir / f"{source_path.stem}_all.json"
-    json_orig.write_text(
-        json.dumps(orig_all, indent=2, default=str), encoding="utf-8")
+    json_orig.write_text(json.dumps(orig_all, indent=2, default=str), encoding="utf-8")
     json_written = out_dir / f"{written_path.stem}_all.json"
     json_written.write_text(
-        json.dumps(written_all, indent=2, default=str), encoding="utf-8")
+        json.dumps(written_all, indent=2, default=str), encoding="utf-8"
+    )
 
     # Step 2: deep compare — every mapped field
-    print(f"\n[2/2] Comparing all mapped fields (inputs + formula results) ...")
+    print("\n[2/2] Comparing all mapped fields (inputs + formula results) ...")
     t0 = time.time()
-    checked, matched, mismatched, details = _compare_deep(
-        orig_all, written_all)
+    checked, matched, mismatched, details = _compare_deep(orig_all, written_all)
     t_compare = time.time() - t0
 
     if mismatched == 0:
-        print(f"      *** All {checked} fields match —"
-              f" FULL FIDELITY CONFIRMED ***")
+        print(f"      *** All {checked} fields match — FULL FIDELITY CONFIRMED ***")
     else:
-        print(f"      {checked} checked, {matched} matched,"
-              f" {mismatched} MISMATCHES:")
+        print(f"      {checked} checked, {matched} matched, {mismatched} MISMATCHES:")
         for d in details[:30]:
             print(d)
         if len(details) > 30:
-            print(f"      ... and {len(details) - 30} more"
-                  f" (full list saved to verify_excel_details.txt)")
+            print(
+                f"      ... and {len(details) - 30} more"
+                f" (full list saved to verify_excel_details.txt)"
+            )
 
     total_t = t_read_orig + t_read_written + t_compare
-    print(f"\n      {t_compare:.1f}s compare,"
-          f" {total_t:.1f}s total")
+    print(f"\n      {t_compare:.1f}s compare, {total_t:.1f}s total")
 
     print(f"\n  {'═' * 40}")
     print(f"  Artifacts saved to {out_dir}/")
@@ -242,8 +245,7 @@ def verify_excel(
     }
 
     summary_path = out_dir / "verify_excel_summary.json"
-    summary_path.write_text(
-        json.dumps(result, indent=2, default=str), encoding="utf-8")
+    summary_path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
 
     # Full, untruncated mismatch details -- the screen output above caps at
     # 30 for readability, but this file keeps every one so a later session
@@ -254,7 +256,8 @@ def verify_excel(
     else:
         details_text = (
             f"{checked} checked, {matched} matched, {mismatched} MISMATCHES:\n"
-            + "\n".join(details) + "\n"
+            + "\n".join(details)
+            + "\n"
         )
     details_path.write_text(details_text, encoding="utf-8")
 

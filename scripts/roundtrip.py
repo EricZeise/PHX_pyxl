@@ -53,8 +53,9 @@ DEFAULT_PHPP_VERSION = "EN_10_6_IP"
 def _field_map_for_version(phpp_version: str) -> str:
     path = ROOT / "phpp-field-mapping" / f"{phpp_version}.md"
     if not path.exists():
-        print(f"No field map found for --phpp-version {phpp_version!r} "
-              f"(expected {path})")
+        print(
+            f"No field map found for --phpp-version {phpp_version!r} (expected {path})"
+        )
         sys.exit(1)
     return str(path)
 
@@ -110,6 +111,7 @@ def _verify_writes(
 ) -> tuple[int, int, list[str]]:
     """Verify every cell the writer targeted (openpyxl, no Excel)."""
     import warnings
+
     warnings.filterwarnings("ignore", category=UserWarning)
     from openpyxl import load_workbook
 
@@ -133,7 +135,8 @@ def _verify_writes(
             details.append(
                 f"  {sheet_name}!{col}{row}:"
                 f" expected {expected!r} ({type(expected).__name__}),"
-                f" got {actual!r} ({type(actual).__name__})")
+                f" got {actual!r} ({type(actual).__name__})"
+            )
 
     wb.close()
     return checked, mismatched, details
@@ -183,7 +186,7 @@ def _xlwings_full_read(path: Path, field_map: str) -> dict[str, Any] | None:
 
         app = xw.App(spec=_find_excel(), visible=False, add_book=False)
         app.display_alerts = False
-    except Exception:
+    except Exception:  # noqa: BLE001 -- no usable Excel (not installed, no permission): the caller skips Part 2
         return None
 
     try:
@@ -202,7 +205,8 @@ def _xlwings_full_read(path: Path, field_map: str) -> dict[str, Any] | None:
             for field_name, spec in ws_spec.get("fields", {}).items():
                 if not spec.get("locator_string"):
                     continue
-                from phpp_tool.locators import norm, find_row_in_col as _fric
+                from phpp_tool.locators import norm
+
                 loc_col = spec["locator_col"]
                 needle = norm(spec["locator_string"])
                 col_idx = col_to_idx(loc_col)
@@ -240,8 +244,11 @@ def _flatten_for_compare(data: dict[str, Any]) -> dict[str, Any]:
     for ws_key, ws_data in data.items():
         if not isinstance(ws_data, dict):
             continue
-        ws_flat = {k: v for k, v in ws_data.items()
-                   if v is not None and not isinstance(v, (dict, list))}
+        ws_flat = {
+            k: v
+            for k, v in ws_data.items()
+            if v is not None and not isinstance(v, (dict, list))
+        }
         if ws_flat:
             flat[ws_key] = ws_flat
     return flat
@@ -271,7 +278,8 @@ def _compare_full(
                 mismatched += 1
                 details.append(
                     f"  {ws_key}.{field}:"
-                    f" original={orig_val!r}, written={written_val!r}")
+                    f" original={orig_val!r}, written={written_val!r}"
+                )
 
     return checked, mismatched, details
 
@@ -279,6 +287,7 @@ def _compare_full(
 # ======================================================================
 # Main roundtrip
 # ======================================================================
+
 
 def roundtrip(source: Path, template: Path, out_dir: Path) -> dict:
     source_name = source.stem
@@ -291,7 +300,7 @@ def roundtrip(source: Path, template: Path, out_dir: Path) -> dict:
     # ==================================================================
     # PART 1 — Pure openpyxl (no Excel)
     # ==================================================================
-    print(f"\n  PART 1: Pure openpyxl verification")
+    print("\n  PART 1: Pure openpyxl verification")
     print(f"  {'─' * 40}")
 
     # Step 1: read source — input cells only
@@ -300,9 +309,11 @@ def roundtrip(source: Path, template: Path, out_dir: Path) -> dict:
     data_inputs = read_phpp(str(source), FIELD_MAP, skip_formulas=True)
     t_read_inputs = time.time() - t0
     total_i, non_none_i = _count_values(data_inputs)
-    print(f"      {len(data_inputs)} worksheets,"
-          f" {non_none_i} non-None / {total_i} total values,"
-          f" {t_read_inputs:.1f}s")
+    print(
+        f"      {len(data_inputs)} worksheets,"
+        f" {non_none_i} non-None / {total_i} total values,"
+        f" {t_read_inputs:.1f}s"
+    )
 
     json_inputs = out_dir / f"{source_name}_inputs.json"
     json_inputs.write_text(
@@ -317,30 +328,28 @@ def roundtrip(source: Path, template: Path, out_dir: Path) -> dict:
     total_a, non_none_a = _count_values(data_all)
     filtered = non_none_a - non_none_i
     pct = 100 * filtered / max(non_none_a, 1)
-    print(f"      {len(data_all)} worksheets,"
-          f" {non_none_a} non-None / {total_a} total values,"
-          f" {t_read_all:.1f}s")
+    print(
+        f"      {len(data_all)} worksheets,"
+        f" {non_none_a} non-None / {total_a} total values,"
+        f" {t_read_all:.1f}s"
+    )
     print(f"      Formula filter removed {filtered} values ({pct:.1f}%)")
 
     json_all = out_dir / f"{source_name}_all.json"
-    json_all.write_text(
-        json.dumps(data_all, indent=2, default=str), encoding="utf-8"
-    )
+    json_all.write_text(json.dumps(data_all, indent=2, default=str), encoding="utf-8")
 
     # Step 3: write into template
     written_path = out_dir / f"{source_name}_written.xlsx"
     print(f"\n[3/4] Writing into {template.name} → {written_path.name} ...")
     t0 = time.time()
-    writes = write_phpp(data_inputs, str(template), str(written_path),
-                        FIELD_MAP)
+    writes = write_phpp(data_inputs, str(template), str(written_path), FIELD_MAP)
     t_write = time.time() - t0
     print(f"      {len(writes)} cell writes, {t_write:.1f}s")
 
     # Step 4: verify every written cell
     print(f"\n[4/4] Verifying {len(writes)} written cells ...")
     t0 = time.time()
-    checked, mismatched, mismatch_details = _verify_writes(
-        written_path, writes)
+    checked, mismatched, mismatch_details = _verify_writes(written_path, writes)
     t_verify = time.time() - t0
 
     if mismatched == 0:
@@ -372,7 +381,7 @@ def roundtrip(source: Path, template: Path, out_dir: Path) -> dict:
     excel_available = False
     t_excel = 0.0
 
-    print(f"\n  PART 2: Excel cache validation (live vs cached)")
+    print("\n  PART 2: Excel cache validation (live vs cached)")
     print(f"  {'─' * 40}")
 
     print(f"\n[5/5] Reading {source.name} via xlwings+Excel ...")
@@ -391,27 +400,31 @@ def roundtrip(source: Path, template: Path, out_dir: Path) -> dict:
 
         json_orig_excel = out_dir / f"{source_name}_orig_excel.json"
         json_orig_excel.write_text(
-            json.dumps(orig_excel_flat, indent=2, default=str),
-            encoding="utf-8"
+            json.dumps(orig_excel_flat, indent=2, default=str), encoding="utf-8"
         )
 
         # Compare Excel live values vs openpyxl cached values
         all_flat = _flatten_for_compare(data_all)
         excel_checked, excel_mismatched, excel_details = _compare_full(
-            orig_excel_flat, all_flat)
+            orig_excel_flat, all_flat
+        )
 
         if excel_mismatched == 0:
-            print(f"      *** All {excel_checked} fields match:"
-                  f" openpyxl cache is fresh ***")
+            print(
+                f"      *** All {excel_checked} fields match:"
+                f" openpyxl cache is fresh ***"
+            )
         else:
-            print(f"      {excel_checked} fields compared,"
-                  f" {excel_mismatched} stale cached values:")
+            print(
+                f"      {excel_checked} fields compared,"
+                f" {excel_mismatched} stale cached values:"
+            )
             for d in excel_details[:20]:
                 print(d)
             if len(excel_details) > 20:
                 print(f"      ... and {len(excel_details) - 20} more")
 
-        print(f"\n      Note: written file formula verification requires")
+        print("\n      Note: written file formula verification requires")
         print(f"      manually opening {written_path.name} in Excel.")
 
     # ==================================================================
@@ -446,11 +459,11 @@ def main() -> None:
     for i, arg in enumerate(args):
         if arg.startswith("--phpp-version="):
             FIELD_MAP = _field_map_for_version(arg.split("=", 1)[1])
-            args = args[:i] + args[i + 1:]
+            args = args[:i] + args[i + 1 :]
             break
         if arg == "--phpp-version" and i + 1 < len(args):
             FIELD_MAP = _field_map_for_version(args[i + 1])
-            args = args[:i] + args[i + 2:]
+            args = args[:i] + args[i + 2 :]
             break
 
     if len(args) < 2:
@@ -480,14 +493,17 @@ def main() -> None:
         for s in summaries:
             excel_info = ""
             if s["excel_available"]:
-                excel_info = (f"  cache: {s['excel_checked']} checked,"
-                              f" {s['excel_stale']} stale")
-            print(f"  {s['source']:20s} → {s['template']:20s}"
-                  f"  written: {s['cells_written']:>4}"
-                  f"  verified: {s['cells_verified']:>4}"
-                  f"  mismatches: {s['mismatches']:>3}"
-                  f"{excel_info}"
-                  f"  time: {s['time_total']:.1f}s")
+                excel_info = (
+                    f"  cache: {s['excel_checked']} checked, {s['excel_stale']} stale"
+                )
+            print(
+                f"  {s['source']:20s} → {s['template']:20s}"
+                f"  written: {s['cells_written']:>4}"
+                f"  verified: {s['cells_verified']:>4}"
+                f"  mismatches: {s['mismatches']:>3}"
+                f"{excel_info}"
+                f"  time: {s['time_total']:.1f}s"
+            )
 
 
 if __name__ == "__main__":

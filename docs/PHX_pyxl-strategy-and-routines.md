@@ -193,7 +193,12 @@ python scripts/verify_excel.py Data/Example_IP.xlsx records/roundtrip_<timestamp
 ### Running the test suite
 
 ```bash
-pytest tests/ -v          # 96 tests, ~0.15s, no Excel needed
+uv run pytest tests/ -v   # 114 tests, ~0.3s, no Excel needed (or: pytest tests/ -v in an activated environment)
+
+# The review gate (CLAUDE.md, "Review gate" and "Step 2"): lint, format, imports, types, lock, tests
+uv run ruff check . && uv run ruff format --check . && uv run isort --check-only . \
+  && uv run ty check --error-on-warning && uv lock --check && uv run pytest -q
+uv run python scripts/check_ratchet.py && uv run python scripts/run_with_coverage.py
 ```
 
 ### Quick reference
@@ -205,7 +210,8 @@ pytest tests/ -v          # 96 tests, ~0.15s, no Excel needed
 | Check field map coverage | `phpp-tool inspect-map` |
 | Roundtrip verification (Parts 1–2) | `python scripts/roundtrip.py Data/Example_IP.xlsx Data/Empty_IP.xlsx` |
 | Full-fidelity check (Stage 3, post-Excel-save) | `python scripts/verify_excel.py <source.xlsx> <written.xlsx>` |
-| Unit tests | `pytest tests/ -v` |
+| Unit tests | `uv run pytest tests/ -v` |
+| Review gate (lint, types, lock, tests) / detailed review (ratchet, coverage) | see "Running the test suite" above |
 
 ---
 
@@ -402,6 +408,18 @@ Two refinements added 2026-07-03, mirroring the read-side fixes in `resolve_name
 - **Multi-cell destinations:** if the resolved coordinate is a range (e.g. `"K37:R37"`), splits to just the first cell before calling `coordinate_from_string()` (which can't parse a range string).
 - **SI-mirror redirect:** if the destination sheet is an `"<Name> SI"` mirror tab, redirects to the base tab's same coordinate via `base_sheet_for_si_mirror()`, since the SI-mirror cell is a passthrough formula, not the real input cell.
 
+### `atomic.py` — Atomic file output (added 2026-11-09)
+
+**Strategy role:** Every file the package produces -- the written PHPP workbook, the JSON building record (`phpp-tool read -o`) and the `compare_json` reports -- is written to a temporary file beside the destination, flushed to disk, and then moved over the destination in one `os.replace`. A crash, a full disk or an interrupted run therefore leaves the previous output exactly as it was and never a half-written file; the temporary file is removed on any failure. (The template and input workbooks were never modified; this protects earlier outputs.)
+
+| Function | What it does |
+|----------|-------------|
+| `atomic_write_bytes(path, data)` | Temp file in the destination folder (created if missing) → `fsync` → keep the destination's permissions (new files get 0644) → `os.replace`. |
+| `atomic_write_text(path, text, encoding="utf-8")` | `atomic_write_bytes` for text. |
+| `atomic_copy(source, destination)` | The same for a copy (`shutil.copy2` semantics), used when a write has nothing to patch. |
+
+Covered by `tests/test_atomic.py` (failure while writing, failure while replacing, with and without a previous file, writing over the template itself, and the `compare_json` command line).
+
 ### `surgical_writer.py` — ZIP/XML persistence (ported from PHX_Dev)
 
 **Strategy role:** Persists the writer's `(sheet_name, col, row, value)` tuples without going through openpyxl's save cycle, so `<extLst>` extensions and `<headerFooter>` content survive untouched.
@@ -535,7 +553,7 @@ Lists every mapped worksheet with counts of fields, sections, and config items. 
 
 The roundtrip test answers a single question: **does every input value survive the full read → JSON → write cycle unchanged?**
 
-This is not a unit test of individual functions — those are covered by the 88 pytest cases. The roundtrip test is an integration test of the entire pipeline against real PHPP workbooks. It treats the tool as a black box and verifies the output against the input at the cell level.
+This is not a unit test of individual functions — those are covered by the 114 pytest cases. The roundtrip test is an integration test of the entire pipeline against real PHPP workbooks. It treats the tool as a black box and verifies the output against the input at the cell level.
 
 #### Why cell-by-cell verification matters
 

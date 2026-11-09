@@ -6,8 +6,9 @@ import pytest
 
 from phpp_tool.map_parser import parse_field_map
 
-FIELD_MAP = (Path(__file__).resolve().parent.parent
-             / "phpp-field-mapping" / "EN_10_6_IP.md")
+FIELD_MAP = (
+    Path(__file__).resolve().parent.parent / "phpp-field-mapping" / "EN_10_6_IP.md"
+)
 
 
 @pytest.fixture(scope="module")
@@ -20,13 +21,36 @@ def field_map():
 # ---------------------------------------------------------------------------
 
 EXPECTED_KEYS = [
-    "VERIFICATION", "VARIANTS", "CLIMATE", "UVALUES", "AREAS",
-    "GROUND", "COMPONENTS", "WINDOWS", "SHADING", "VENTILATION",
-    "ADDNL_VENT", "HEATING_DEMAND", "HEATING_PEAK_LOAD",
-    "COOLING_DEMAND", "COOLING_PEAK_LOAD", "SUMM_VENT",
-    "COOLING_UNITS", "DHW", "SOLAR_DHW", "SOLAR_PV",
-    "ELECTRICITY", "ELEC_NON_RES", "USE_NON_RES", "AUX_ELEC",
-    "IHG_NON_RES", "PER", "HP", "BOILER", "DATA", "OVERVIEW",
+    "VERIFICATION",
+    "VARIANTS",
+    "CLIMATE",
+    "UVALUES",
+    "AREAS",
+    "GROUND",
+    "COMPONENTS",
+    "WINDOWS",
+    "SHADING",
+    "VENTILATION",
+    "ADDNL_VENT",
+    "HEATING_DEMAND",
+    "HEATING_PEAK_LOAD",
+    "COOLING_DEMAND",
+    "COOLING_PEAK_LOAD",
+    "SUMM_VENT",
+    "COOLING_UNITS",
+    "DHW",
+    "SOLAR_DHW",
+    "SOLAR_PV",
+    "ELECTRICITY",
+    "ELEC_NON_RES",
+    "USE_NON_RES",
+    "AUX_ELEC",
+    "IHG_NON_RES",
+    "PER",
+    "HP",
+    "BOILER",
+    "DATA",
+    "OVERVIEW",
     "EASY_PH",
 ]
 
@@ -46,8 +70,16 @@ def test_sheet_names(field_map):
 
 
 def test_stubs_parse_without_error(field_map):
-    for key in ["GROUND", "SUMM_VENT", "USE_NON_RES", "AUX_ELEC",
-                "IHG_NON_RES", "HP", "BOILER", "EASY_PH"]:
+    for key in [
+        "GROUND",
+        "SUMM_VENT",
+        "USE_NON_RES",
+        "AUX_ELEC",
+        "IHG_NON_RES",
+        "HP",
+        "BOILER",
+        "EASY_PH",
+    ]:
         ws = field_map[key]
         assert ws["worksheet_key"] == key
 
@@ -55,6 +87,7 @@ def test_stubs_parse_without_error(field_map):
 # ---------------------------------------------------------------------------
 # Strategy 1: Label-anchored relative
 # ---------------------------------------------------------------------------
+
 
 class TestLabelAnchored:
     def test_setpoint_winter(self, field_map):
@@ -124,11 +157,13 @@ class TestLabelAnchored:
 # Strategy 2: Header + entry locator (repeating blocks)
 # ---------------------------------------------------------------------------
 
+
 class TestHeaderEntryBlock:
     def test_window_rows(self, field_map):
         sec = field_map["WINDOWS"]["sections"]["window_rows"]
         assert sec["header_locator"] == {
-            "col": "L", "string": "Windows and entrance doors"
+            "col": "L",
+            "string": "Windows and entrance doors",
         }
         assert sec["entry_locator"] == {"col": "L", "string": "Quan-"}
         assert "quantity" in sec["column_fields"]
@@ -195,6 +230,7 @@ class TestHeaderEntryBlock:
 # Strategy 3: Named ranges
 # ---------------------------------------------------------------------------
 
+
 class TestNamedRanges:
     def test_climate_named_ranges(self, field_map):
         sec = field_map["CLIMATE"]["sections"]["named_ranges"]
@@ -205,8 +241,7 @@ class TestNamedRanges:
     def test_cooling_units_supply_air_named_ranges(self, field_map):
         sec = field_map["COOLING_UNITS"]["sections"]["supply_air"]
         assert sec["items"]["used"] == "Kuehlgeraete_Zuluft_Kuehlung_Ankreuzen"
-        assert (sec["items"]["num_units"]
-                == "Kuehlgeraete_Kompressor_Zuluft_Anzahl")
+        assert sec["items"]["num_units"] == "Kuehlgeraete_Kompressor_Zuluft_Anzahl"
 
     def test_per_named_ranges(self, field_map):
         sec = field_map["PER"]["sections"]["named_ranges"]
@@ -220,6 +255,7 @@ class TestNamedRanges:
 # ---------------------------------------------------------------------------
 # Strategy 4: Absolute addresses
 # ---------------------------------------------------------------------------
+
 
 class TestAbsoluteAddresses:
     def test_climate_defined_ranges(self, field_map):
@@ -258,6 +294,7 @@ class TestAbsoluteAddresses:
 # ---------------------------------------------------------------------------
 # Strategy 5: Column + row-offset within a block
 # ---------------------------------------------------------------------------
+
 
 class TestRowOffsetBlock:
     def test_uvalues_constructor_header(self, field_map):
@@ -317,6 +354,7 @@ class TestRowOffsetBlock:
 # Strategy 6: Fixed result rows/cols
 # ---------------------------------------------------------------------------
 
+
 class TestFixedRowsCols:
     def test_heating_demand_config(self, field_map):
         cfg = field_map["HEATING_DEMAND"]["config"]
@@ -346,6 +384,7 @@ class TestFixedRowsCols:
 # DHW tanks: mixed column + row + entry_row_start
 # ---------------------------------------------------------------------------
 
+
 class TestDHWTanks:
     def test_tanks_locators(self, field_map):
         sec = field_map["DHW"]["sections"]["tanks"]
@@ -373,6 +412,7 @@ class TestDHWTanks:
 # Components glazings: fixed start row
 # ---------------------------------------------------------------------------
 
+
 class TestComponentsGlazings:
     def test_glazings_items(self, field_map):
         sec = field_map["COMPONENTS"]["sections"]["glazings"]
@@ -389,6 +429,7 @@ class TestComponentsGlazings:
 # ---------------------------------------------------------------------------
 # Variants: header locators + input items
 # ---------------------------------------------------------------------------
+
 
 class TestVariants:
     def test_variants_config(self, field_map):
@@ -408,6 +449,7 @@ class TestVariants:
 # ---------------------------------------------------------------------------
 # Climate: complex multi-part sections
 # ---------------------------------------------------------------------------
+
 
 class TestClimate:
     def test_active_block_items(self, field_map):
@@ -433,6 +475,7 @@ class TestClimate:
 # ---------------------------------------------------------------------------
 # Electricity: appliance rows
 # ---------------------------------------------------------------------------
+
 
 class TestElectricity:
     def test_input_columns(self, field_map):
@@ -461,6 +504,7 @@ class TestElectricity:
 # PER: heading-based sections
 # ---------------------------------------------------------------------------
 
+
 class TestPER:
     def test_per_config(self, field_map):
         cfg = field_map["PER"]["config"]
@@ -475,8 +519,7 @@ class TestPER:
     def test_per_heating(self, field_map):
         sec = field_map["PER"]["sections"]["heating"]
         assert sec["items"]["locator_string_heading"] == "Heating"
-        assert (sec["items"]["locator_string_start"]
-                == "Electricity (HP compact unit)")
+        assert sec["items"]["locator_string_start"] == "Electricity (HP compact unit)"
 
     def test_per_addresses(self, field_map):
         sec = field_map["PER"]["sections"]["addresses"]
@@ -487,6 +530,7 @@ class TestPER:
 # ---------------------------------------------------------------------------
 # Solar PV: columns/rows grid
 # ---------------------------------------------------------------------------
+
 
 class TestSolarPV:
     def test_pv_columns(self, field_map):
@@ -503,6 +547,7 @@ class TestSolarPV:
 # ---------------------------------------------------------------------------
 # Data: version section
 # ---------------------------------------------------------------------------
+
 
 def test_data_version(field_map):
     sec = field_map["DATA"]["sections"]["version"]

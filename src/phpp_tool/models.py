@@ -23,6 +23,7 @@ class _Base(BaseModel):
 # Verification
 # ---------------------------------------------------------------------------
 
+
 class VerificationData(_Base):
     phi_building_category_type: Any = None
     phi_building_use_type: Any = None
@@ -43,6 +44,7 @@ class VerificationData(_Base):
 # Overview
 # ---------------------------------------------------------------------------
 
+
 class OverviewBasicData(_Base):
     address_project_name: str | None = None
     address_number_dwellings_res: int | float | None = None
@@ -60,6 +62,7 @@ class OverviewData(_Base):
 # ---------------------------------------------------------------------------
 # Climate
 # ---------------------------------------------------------------------------
+
 
 class ClimateDefinedRanges(_Base):
     climate_zone: str | None = None
@@ -81,18 +84,20 @@ class ClimateData(_Base):
 # Ventilation
 # ---------------------------------------------------------------------------
 
+
 class VentilationData(_Base):
     vent_type: Any = None
     wind_coeff_e: float | None = None
     wind_coeff_f: float | None = None
     airtightness_n50: float | None = None
-    airtightness_Vn50: float | None = None
+    airtightness_Vn50: float | None = None  # noqa: N815 -- the PHPP field's own name, part of the record schema
     multi_unit_on: Any = None
 
 
 # ---------------------------------------------------------------------------
 # Areas
 # ---------------------------------------------------------------------------
+
 
 class Areas(_Base):
     tfa_input: float | None = None
@@ -105,6 +110,7 @@ class Areas(_Base):
 # ---------------------------------------------------------------------------
 # Windows / Shading
 # ---------------------------------------------------------------------------
+
 
 class WindowRow(_Base):
     quantity: int | float | None = None
@@ -131,6 +137,7 @@ class Shading(_Base):
 # Components
 # ---------------------------------------------------------------------------
 
+
 class Components(_Base):
     glazings: list[dict[str, Any]] | dict[str, Any] | None = None
     frames: list[dict[str, Any]] | None = None
@@ -140,6 +147,7 @@ class Components(_Base):
 # ---------------------------------------------------------------------------
 # DHW
 # ---------------------------------------------------------------------------
+
 
 class DHWPiping(_Base):
     total_length: float | None = None
@@ -176,6 +184,7 @@ class DHWData(_Base):
 # Additional ventilation
 # ---------------------------------------------------------------------------
 
+
 class AddnlVent(_Base):
     rooms: list[dict[str, Any]] | None = None
     units: list[dict[str, Any]] | None = None
@@ -186,12 +195,14 @@ class AddnlVent(_Base):
 # Top-level building record
 # ---------------------------------------------------------------------------
 
+
 class BuildingRecord(_Base):
     """Complete building record extracted from a PHPP workbook.
 
     Worksheet keys map to typed sub-models where available, or to
     ``dict[str, Any]`` for less-structured worksheets.
     """
+
     VERIFICATION: VerificationData | None = None
     OVERVIEW: OverviewData | None = None
     CLIMATE: ClimateData | None = None

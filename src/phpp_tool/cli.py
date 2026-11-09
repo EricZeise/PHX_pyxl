@@ -20,6 +20,7 @@ from pathlib import Path
 
 import click
 
+from phpp_tool.atomic import atomic_write_text
 from phpp_tool.map_parser import parse_field_map
 
 FIELD_MAP_DIR = "phpp-field-mapping"
@@ -33,8 +34,8 @@ def _resolve_field_map(phpp_version: str, field_map: str | None) -> str:
     path = Path(FIELD_MAP_DIR) / f"{phpp_version}.md"
     if not path.exists():
         raise click.ClickException(
-            f"No field map found for --phpp-version {phpp_version!r} "
-            f"(expected {path})")
+            f"No field map found for --phpp-version {phpp_version!r} (expected {path})"
+        )
     return str(path)
 
 
@@ -60,12 +61,14 @@ def main() -> None:
 
 @main.command()
 @click.argument("workbook", type=click.Path(exists=True, dir_okay=False))
-@click.option("-o", "--output", type=click.Path(dir_okay=False),
-              help="Output JSON file path.")
+@click.option(
+    "-o", "--output", type=click.Path(dir_okay=False), help="Output JSON file path."
+)
 @_phpp_version_option
 @_field_map_option
-def read(workbook: str, output: str | None, phpp_version: str,
-         field_map: str | None) -> None:
+def read(
+    workbook: str, output: str | None, phpp_version: str, field_map: str | None
+) -> None:
     """Read a filled PHPP workbook into a JSON building record."""
     from phpp_tool.models import BuildingRecord
     from phpp_tool.reader import read_phpp
@@ -78,8 +81,7 @@ def read(workbook: str, output: str | None, phpp_version: str,
     json_str = json.dumps(record_dict, indent=2)
 
     if output:
-        Path(output).parent.mkdir(parents=True, exist_ok=True)
-        Path(output).write_text(json_str, encoding="utf-8")
+        atomic_write_text(output, json_str)
         click.echo(f"Written to {output}")
     else:
         click.echo(json_str)
@@ -88,16 +90,22 @@ def read(workbook: str, output: str | None, phpp_version: str,
 @main.command()
 @click.argument("record_file", type=click.Path(exists=True, dir_okay=False))
 @click.argument("template", type=click.Path(exists=True, dir_okay=False))
-@click.option("-o", "--output", type=click.Path(dir_okay=False),
-              required=True, help="Output PHPP workbook path.")
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False),
+    required=True,
+    help="Output PHPP workbook path.",
+)
 @_phpp_version_option
 @_field_map_option
 def write(
-        record_file: str,
-        template: str,
-        output: str,
-        phpp_version: str,
-        field_map: str | None) -> None:
+    record_file: str,
+    template: str,
+    output: str,
+    phpp_version: str,
+    field_map: str | None,
+) -> None:
     """Write a JSON building record into a blank PHPP workbook."""
     from phpp_tool.models import BuildingRecord
     from phpp_tool.writer import write_phpp
@@ -111,7 +119,9 @@ def write(
             f"WARNING: record was read with --phpp-version "
             f"{source_version!r} but this write uses {phpp_version!r} -- "
             f"the record and template should be the same PHPP "
-            f"version/type.", err=True)
+            f"version/type.",
+            err=True,
+        )
 
     record = BuildingRecord.model_validate_json(raw)
     record_dict = record.model_dump(exclude_none=True)

@@ -11,3 +11,6 @@ Data
 .DS_Store
 *.xlsx.log
 ~$*.xlsx
+.coverage
+.coverage.*
+coverage.json

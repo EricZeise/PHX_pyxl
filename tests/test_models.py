@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from phpp_tool.models import (
     BuildingRecord,
     ClimateData,
@@ -14,13 +12,12 @@ from phpp_tool.models import (
     DHWPiping,
     DHWTankData,
     DHWTanks,
-    OverviewData,
     OverviewBasicData,
+    OverviewData,
     VerificationData,
-    Windows,
     WindowRow,
+    Windows,
 )
-
 
 # ---------------------------------------------------------------------------
 # Verification
@@ -95,8 +92,7 @@ class TestClimate:
 
     def test_climate_model(self):
         c = ClimateData(
-            defined_ranges={
-                "climate_zone": "3: Cool-temperate", "latitude": 51.301},
+            defined_ranges={"climate_zone": "3: Cool-temperate", "latitude": 51.301},
             named_ranges={"country": "Europe"},
         )
         assert c.defined_ranges.climate_zone == "3: Cool-temperate"
@@ -137,15 +133,10 @@ class TestDHW:
 
     def test_dhw_from_reader(self):
         data = {
-            "recirc_piping": {
-                "total_length": 13.5,
-                "diameter": 20},
+            "recirc_piping": {"total_length": 13.5, "diameter": 20},
             "tanks": {
-                "tank_1": {
-                    "tank_type": "1-DHW and heating",
-                    "standby_losses": 1.2},
-                "tank_2": {
-                    "tank_type": "0-No storage tank"},
+                "tank_1": {"tank_type": "1-DHW and heating", "standby_losses": 1.2},
+                "tank_2": {"tank_type": "0-No storage tank"},
             },
         }
         dhw = DHWData(**data)
@@ -160,16 +151,17 @@ class TestDHW:
 
 class TestWindows:
     def test_window_row(self):
-        wr = WindowRow(quantity=2, description="Living room",
-                       width=1.5, height=2.0)
+        wr = WindowRow(quantity=2, description="Living room", width=1.5, height=2.0)
         assert wr.quantity == 2
         assert wr.description == "Living room"
 
     def test_windows_with_dicts(self):
-        w = Windows(window_rows=[
-            {"quantity": 2, "description": "South", "_row": 11},
-            {"quantity": 1, "description": "East", "_row": 12},
-        ])
+        w = Windows(
+            window_rows=[
+                {"quantity": 2, "description": "South", "_row": 11},
+                {"quantity": 1, "description": "East", "_row": 12},
+            ]
+        )
         assert len(w.window_rows) == 2
 
 
